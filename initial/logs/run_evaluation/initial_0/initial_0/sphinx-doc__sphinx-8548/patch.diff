@@ -1,0 +1,174 @@
+diff --git a/setup.py b/setup.py
+index 8d40de1a8..03f325278 100644
+--- a/setup.py
++++ b/setup.py
+@@ -15,22 +15,22 @@ if sys.version_info < (3, 5):
+     sys.exit(1)
+ 
+ install_requires = [
+-    'sphinxcontrib-applehelp',
+-    'sphinxcontrib-devhelp',
++    'sphinxcontrib-applehelp<=1.0.7',
++    'sphinxcontrib-devhelp<=1.0.5',
+     'sphinxcontrib-jsmath',
+-    'sphinxcontrib-htmlhelp',
+-    'sphinxcontrib-serializinghtml',
+-    'sphinxcontrib-qthelp',
+-    'Jinja2>=2.3',
++    'sphinxcontrib-htmlhelp<=2.0.4',
++    'sphinxcontrib-serializinghtml<=1.1.9',
++    'sphinxcontrib-qthelp<=1.0.6',
++    'Jinja2<3.0',
+     'Pygments>=2.0',
+     'docutils>=0.12',
+     'snowballstemmer>=1.1',
+     'babel>=1.3',
+-    'alabaster>=0.7,<0.8',
++    'alabaster>=0.7,<0.7.12',
+     'imagesize',
+     'requests>=2.5.0',
+     'setuptools',
+-    'packaging',
++    'packaging', 'markupsafe<=2.0.1',
+ ]
+ 
+ extras_require = {
+diff --git a/sphinx/ext/autodoc/importer.py b/sphinx/ext/autodoc/importer.py
+index d6e73d36a..6af221418 100644
+--- a/sphinx/ext/autodoc/importer.py
++++ b/sphinx/ext/autodoc/importer.py
+@@ -17,7 +17,7 @@ from sphinx.deprecation import RemovedInSphinx40Warning, deprecated_alias
+ from sphinx.pycode import ModuleAnalyzer
+ from sphinx.util import logging
+ from sphinx.util.inspect import (getannotations, getmro, getslots, isclass, isenumclass,
+-                                 safe_getattr)
++                                safe_getattr)
+ 
+ if False:
+     # For type annotation
+@@ -257,83 +257,62 @@ def get_class_members(subject: Any, objpath: List[str], attrgetter: Callable,
+     from sphinx.ext.autodoc import INSTANCEATTR
+ 
+     # the members directly defined in the class
+-    obj_dict = attrgetter(subject, '__dict__', {})
+-
+     members = {}  # type: Dict[str, ClassAttribute]
+ 
+-    # enum members
+-    if isenumclass(subject):
+-        for name, value in subject.__members__.items():
+-            if name not in members:
+-                members[name] = ClassAttribute(subject, name, value)
++    # traverse MRO to get all attributes, including inherited ones
++    for cls in getmro(subject):
++        obj_dict = attrgetter(cls, '__dict__', {})
+ 
+-        superclass = subject.__mro__[1]
+-        for name in obj_dict:
+-            if name not in superclass.__dict__:
+-                value = safe_getattr(subject, name)
+-                members[name] = ClassAttribute(subject, name, value)
++        # enum members
++        if isenumclass(cls):
++            for name, value in cls.__members__.items():
++                if name not in members:
++                    members[name] = ClassAttribute(cls, name, value)
+ 
+-    # members in __slots__
+-    try:
+-        __slots__ = getslots(subject)
+-        if __slots__:
+-            from sphinx.ext.autodoc import SLOTSATTR
++            superclass = cls.__mro__[1]
++            for name in obj_dict:
++                if name not in superclass.__dict__:
++                    value = safe_getattr(cls, name)
++                    members[name] = ClassAttribute(cls, name, value)
+ 
+-            for name, docstring in __slots__.items():
+-                members[name] = ClassAttribute(subject, name, SLOTSATTR, docstring)
+-    except (AttributeError, TypeError, ValueError):
+-        pass
+-
+-    # other members
+-    for name in dir(subject):
++        # members in __slots__
+         try:
+-            value = attrgetter(subject, name)
+-            unmangled = unmangle(subject, name)
+-            if unmangled and unmangled not in members:
+-                if name in obj_dict:
+-                    members[unmangled] = ClassAttribute(subject, unmangled, value)
+-                else:
+-                    members[unmangled] = ClassAttribute(None, unmangled, value)
+-        except AttributeError:
+-            continue
++            __slots__ = getslots(cls)
++            if __slots__:
++                from sphinx.ext.autodoc import SLOTSATTR
++
++                for name, docstring in __slots__.items():
++                    members[name] = ClassAttribute(cls, name, SLOTSATTR, docstring)
++        except (AttributeError, TypeError, ValueError):
++            pass
++
++        # other members
++        for name in dir(cls):
++            if name not in members:  # don't override members from derived class
++                try:
++                    value = attrgetter(cls, name)
++                    docstring = getattr(value, '__doc__', None)
++                    name = unmangle(cls, name)
++                    if name:
++                        members[name] = ClassAttribute(cls, name, value, docstring)
++                except AttributeError:
++                    continue
+ 
+     # annotation only member (ex. attr: int)
+-    for cls in getmro(subject):
++    for c in getmro(subject):
+         try:
+-            for name in getannotations(cls):
+-                name = unmangle(cls, name)
++            for name in getannotations(c):
++                name = unmangle(c, name)
+                 if name and name not in members:
+-                    members[name] = ClassAttribute(cls, name, INSTANCEATTR)
++                    members[name] = ClassAttribute(c, name, INSTANCEATTR)
+         except AttributeError:
+             pass
+ 
+     if analyzer:
+         # append instance attributes (cf. self.attr1) if analyzer knows
+         namespace = '.'.join(objpath)
+-        for (ns, name), docstring in analyzer.attr_docs.items():
++        for (ns, name) in analyzer.find_attr_docs():
+             if namespace == ns and name not in members:
+-                members[name] = ClassAttribute(subject, name, INSTANCEATTR,
+-                                               '\n'.join(docstring))
+-
+-    return members
+-
++                members[name] = ClassAttribute(subject, name, INSTANCEATTR)
+ 
+-from sphinx.ext.autodoc.mock import (MockFinder, MockLoader, _MockModule, _MockObject,  # NOQA
+-                                     mock)
+-
+-deprecated_alias('sphinx.ext.autodoc.importer',
+-                 {
+-                     '_MockModule': _MockModule,
+-                     '_MockObject': _MockObject,
+-                     'MockFinder': MockFinder,
+-                     'MockLoader': MockLoader,
+-                     'mock': mock,
+-                 },
+-                 RemovedInSphinx40Warning,
+-                 {
+-                     '_MockModule': 'sphinx.ext.autodoc.mock._MockModule',
+-                     '_MockObject': 'sphinx.ext.autodoc.mock._MockObject',
+-                     'MockFinder': 'sphinx.ext.autodoc.mock.MockFinder',
+-                     'MockLoader': 'sphinx.ext.autodoc.mock.MockLoader',
+-                     'mock': 'sphinx.ext.autodoc.mock.mock',
+-                 })
++    return members
+\ No newline at end of file

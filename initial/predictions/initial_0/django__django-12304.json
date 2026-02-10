@@ -1,0 +1,6 @@
+{
+    "instance_id": "django__django-12304",
+    "model_name_or_path": "nerf_editwholefiles_med_0",
+    "model_patch": "diff --git a/django/db/models/enums.py b/django/db/models/enums.py\nindex f48143ddaf..0acaaf02cb 100644\n--- a/django/db/models/enums.py\n+++ b/django/db/models/enums.py\n@@ -8,6 +8,8 @@ __all__ = ['Choices', 'IntegerChoices', 'TextChoices']\n class ChoicesMeta(enum.EnumMeta):\n     \"\"\"A metaclass for creating a enum choices.\"\"\"\n \n+    do_not_call_in_templates = True\n+\n     def __new__(metacls, classname, bases, classdict):\n         labels = []\n         for key in classdict._member_names:\n@@ -78,4 +80,4 @@ class TextChoices(str, Choices):\n     \"\"\"Class for creating enumerated string choices.\"\"\"\n \n     def _generate_next_value_(name, start, count, last_values):\n-        return name\n+        return name\n\\ No newline at end of file\n",
+    "proposed_model_patches": []
+}

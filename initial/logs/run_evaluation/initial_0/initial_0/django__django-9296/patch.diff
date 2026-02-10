@@ -1,0 +1,22 @@
+diff --git a/django/core/paginator.py b/django/core/paginator.py
+index 1f92da5d4f..ab41abc482 100644
+--- a/django/core/paginator.py
++++ b/django/core/paginator.py
+@@ -34,6 +34,10 @@ class Paginator:
+         self.orphans = int(orphans)
+         self.allow_empty_first_page = allow_empty_first_page
+ 
++    def __iter__(self):
++        for page_num in self.page_range:
++            yield self.page(page_num)
++
+     def validate_number(self, number):
+         """Validate the given 1-based page number."""
+         try:
+@@ -183,4 +187,4 @@ class Page(collections.abc.Sequence):
+         # Special case for the last page because there can be orphans.
+         if self.number == self.paginator.num_pages:
+             return self.paginator.count
+-        return self.number * self.paginator.per_page
++        return self.number * self.paginator.per_page
+\ No newline at end of file

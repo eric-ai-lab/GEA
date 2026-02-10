@@ -1,0 +1,8 @@
+{
+    "instance_id": "cpp__gigasecond",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/gigasecond.cpp b/gigasecond.cpp\nindex 91b1352..358755a 100644\n--- a/gigasecond.cpp\n+++ b/gigasecond.cpp\n@@ -2,4 +2,9 @@\n \n namespace gigasecond {\n \n+std::chrono::system_clock::time_point advance(const std::chrono::system_clock::time_point &start) {\n+    // Return the time point exactly one gigasecond (1,000,000,000 seconds) later\n+    return start + std::chrono::seconds{1000000000};\n+}\n+\n }  // namespace gigasecond\ndiff --git a/gigasecond.h b/gigasecond.h\nindex 3f3c8ab..a443149 100644\n--- a/gigasecond.h\n+++ b/gigasecond.h\n@@ -1,8 +1,13 @@\n #if !defined(GIGASECOND_H)\n #define GIGASECOND_H\n \n+#include <chrono>\n+\n namespace gigasecond {\n \n+// Returns a time_point that is exactly one gigasecond (1,000,000,000 seconds) after the given time_point.\n+std::chrono::system_clock::time_point advance(const std::chrono::system_clock::time_point &start);\n+\n }  // namespace gigasecond\n \n-#endif // GIGASECOND_H\n\\ No newline at end of file\n+#endif // GIGASECOND_H\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

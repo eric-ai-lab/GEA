@@ -1,0 +1,8 @@
+{
+    "instance_id": "javascript__binary",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/binary.js b/binary.js\nindex dfbca26..34ee1d1 100644\n--- a/binary.js\n+++ b/binary.js\n@@ -4,11 +4,25 @@\n //\n \n export class Binary {\n-  constructor() {\n-    throw new Error('Remove this statement and implement this function');\n+  constructor(binaryString) {\n+    // save the binary string internally\n+    this.binaryStr = binaryString;\n   }\n \n   toDecimal() {\n-    throw new Error('Remove this statement and implement this function');\n+    // Check for invalid input: if the string is empty or contains non-0/1 characters return 0\n+    if (!this.binaryStr || !/^[01]+$/.test(this.binaryStr)) {\n+      return 0;\n+    }\n+\n+    let total = 0;\n+    // iterate through the string digits\n+    // Option: iterate left to right\n+    for (let i = 0; i < this.binaryStr.length; i++) {\n+      // Each digit in base 2 corresponds to a power of 2\n+      // Multiply total by 2 and add the digit value\n+      total = total * 2 + (this.binaryStr[i] === '1' ? 1 : 0);\n+    }\n+    return total;\n   }\n }\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

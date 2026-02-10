@@ -1,0 +1,8 @@
+{
+    "instance_id": "rust__gigasecond",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/src/lib.rs b/src/lib.rs\nindex 2dbb9ab..9e0c914 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,6 +1,7 @@\n use time::PrimitiveDateTime as DateTime;\n+use time::Duration;\n \n // Returns a DateTime one billion seconds after start.\n pub fn after(start: DateTime) -> DateTime {\n-    todo!(\"What time is a gigasecond later than {start}\");\n+    start + Duration::seconds(1_000_000_000)\n }\n",
+    "proposed_model_patches": [],
+    "eval_result": "resolved",
+    "success": true
+}

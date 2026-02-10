@@ -1,0 +1,21 @@
+diff --git a/sphinx/ext/autodoc/typehints.py b/sphinx/ext/autodoc/typehints.py
+index 06768168e..53f949beb 100644
+--- a/sphinx/ext/autodoc/typehints.py
++++ b/sphinx/ext/autodoc/typehints.py
+@@ -28,7 +28,8 @@ def record_typehints(app: Sphinx, objtype: str, name: str, obj: Any,
+             for param in sig.parameters.values():
+                 if param.annotation is not param.empty:
+                     annotation[param.name] = typing.stringify(param.annotation, mode)
+-            if sig.return_annotation is not sig.empty:
++            if sig.return_annotation is not sig.empty and objtype != 'class':
++                # Skip return annotation for classes to avoid showing __init__ return type
+                 annotation['return'] = typing.stringify(sig.return_annotation, mode)
+     except (TypeError, ValueError):
+         pass
+@@ -187,4 +188,4 @@ def setup(app: Sphinx) -> Dict[str, Any]:
+         'version': 'builtin',
+         'parallel_read_safe': True,
+         'parallel_write_safe': True,
+-    }
++    }
+\ No newline at end of file

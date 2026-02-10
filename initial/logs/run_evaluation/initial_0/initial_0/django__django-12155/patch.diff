@@ -1,0 +1,28 @@
+diff --git a/django/contrib/admindocs/utils.py b/django/contrib/admindocs/utils.py
+index 4c0e7e2a56..9a81bf2e56 100644
+--- a/django/contrib/admindocs/utils.py
++++ b/django/contrib/admindocs/utils.py
+@@ -34,8 +34,14 @@ def trim_docstring(docstring):
+         return ''
+     # Convert tabs to spaces and split into lines
+     lines = docstring.expandtabs().splitlines()
+-    indent = min(len(line) - len(line.lstrip()) for line in lines if line.lstrip())
+-    trimmed = [lines[0].lstrip()] + [line[indent:].rstrip() for line in lines[1:]]
++    # Determine indentation from lines after the first line
++    tail_lines = lines[1:]
++    indented_tail_lines = [line for line in tail_lines if line.lstrip()]
++    if indented_tail_lines:
++        indent = min(len(line) - len(line.lstrip()) for line in indented_tail_lines)
++    else:
++        indent = 0
++    trimmed = [lines[0].lstrip()] + [line[indent:].rstrip() for line in tail_lines]
+     return "\n".join(trimmed).strip()
+ 
+ 
+@@ -237,4 +243,4 @@ def replace_unnamed_groups(pattern):
+         final_pattern.append(pattern[prev_end:])
+         return ''.join(final_pattern)
+     else:
+-        return pattern
++        return pattern
+\ No newline at end of file

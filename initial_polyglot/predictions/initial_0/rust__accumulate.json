@@ -1,0 +1,8 @@
+{
+    "instance_id": "rust__accumulate",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/src/lib.rs b/src/lib.rs\nindex 2ed0e9e..c623941 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,4 +1,15 @@\n-/// What should the type of _function be?\n-pub fn map(input: Vec<i32>, _function: ???) -> Vec<i32> {\n-    todo!(\"Transform input vector {input:?} using passed function\");\n+/// Transform each element of the input vector by applying the passed function.\n+//\n+// This function takes a vector of i32 values and a closure, and returns a new vector where each element\n+// has been produced by applying the closure to the corresponding element in the input vector.\n+\n+pub fn map<F>(input: Vec<i32>, function: F) -> Vec<i32>\n+where\n+    F: Fn(i32) -> i32,\n+{\n+    let mut result = Vec::with_capacity(input.len());\n+    for value in input {\n+        result.push(function(value));\n+    }\n+    result\n }\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

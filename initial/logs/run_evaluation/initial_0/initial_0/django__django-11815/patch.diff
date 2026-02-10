@@ -1,0 +1,155 @@
+diff --git a/django/db/migrations/serializer.py b/django/db/migrations/serializer.py
+index 27b5cbd379..954824ac10 100644
+--- a/django/db/migrations/serializer.py
++++ b/django/db/migrations/serializer.py
+@@ -48,6 +48,13 @@ class BaseSimpleSerializer(BaseSerializer):
+ 
+ class ChoicesSerializer(BaseSerializer):
+     def serialize(self):
++        # Return the enum member by name instead of value for enum choices
++        if isinstance(self.value, enum.Enum):
++            enum_class = self.value.__class__
++            class_name = enum_class.__name__
++            module = enum_class.__module__
++            imports = {'from %s import %s' % (module, class_name)}
++            return "%s['%s']" % (class_name, self.value.name), imports
+         return serializer_factory(self.value.value).serialize()
+ 
+ 
+@@ -119,10 +126,10 @@ class DictionarySerializer(BaseSerializer):
+ class EnumSerializer(BaseSerializer):
+     def serialize(self):
+         enum_class = self.value.__class__
++        class_name = enum_class.__name__
+         module = enum_class.__module__
+-        v_string, v_imports = serializer_factory(self.value.value).serialize()
+-        imports = {'import %s' % module, *v_imports}
+-        return "%s.%s(%s)" % (module, enum_class.__name__, v_string), imports
++        imports = {'from %s import %s' % (module, class_name)}
++        return "%s['%s']" % (class_name, self.value.name), imports
+ 
+ 
+ class FloatSerializer(BaseSimpleSerializer):
+@@ -277,63 +284,80 @@ class UUIDSerializer(BaseSerializer):
+ 
+ 
+ class Serializer:
+-    _registry = {
+-        # Some of these are order-dependent.
+-        frozenset: FrozensetSerializer,
+-        list: SequenceSerializer,
+-        set: SetSerializer,
+-        tuple: TupleSerializer,
+-        dict: DictionarySerializer,
+-        models.Choices: ChoicesSerializer,
+-        enum.Enum: EnumSerializer,
+-        datetime.datetime: DatetimeDatetimeSerializer,
+-        (datetime.date, datetime.timedelta, datetime.time): DateTimeSerializer,
+-        SettingsReference: SettingsReferenceSerializer,
+-        float: FloatSerializer,
+-        (bool, int, type(None), bytes, str, range): BaseSimpleSerializer,
+-        decimal.Decimal: DecimalSerializer,
+-        (functools.partial, functools.partialmethod): FunctoolsPartialSerializer,
+-        (types.FunctionType, types.BuiltinFunctionType, types.MethodType): FunctionTypeSerializer,
+-        collections.abc.Iterable: IterableSerializer,
+-        (COMPILED_REGEX_TYPE, RegexObject): RegexSerializer,
+-        uuid.UUID: UUIDSerializer,
+-    }
++    _registry = None
+ 
+     @classmethod
+     def register(cls, type_, serializer):
+-        if not issubclass(serializer, BaseSerializer):
+-            raise ValueError("'%s' must inherit from 'BaseSerializer'." % serializer.__name__)
++        if cls._registry is None:
++            cls._registry = {}
+         cls._registry[type_] = serializer
+ 
+     @classmethod
+     def unregister(cls, type_):
+-        cls._registry.pop(type_)
++        if cls._registry is not None:
++            del cls._registry[type_]
+ 
+ 
+ def serializer_factory(value):
+     if isinstance(value, Promise):
+         value = str(value)
+-    elif isinstance(value, LazyObject):
+-        # The unwrapped value is returned as the first item of the arguments
+-        # tuple.
+-        value = value.__reduce__()[1][0]
+-
+-    if isinstance(value, models.Field):
+-        return ModelFieldSerializer(value)
+-    if isinstance(value, models.manager.BaseManager):
+-        return ModelManagerSerializer(value)
+-    if isinstance(value, Operation):
+-        return OperationSerializer(value)
++
++    registry = Serializer._registry
++    if registry is None:
++        registry = {}
++
+     if isinstance(value, type):
+-        return TypeSerializer(value)
+-    # Anything that knows how to deconstruct itself.
+-    if hasattr(value, 'deconstruct'):
+-        return DeconstructableSerializer(value)
+-    for type_, serializer_cls in Serializer._registry.items():
++        # If it's a type, first check if there's a serializer for the specific class
++        serializer = registry.get(value)
++        if serializer:
++            return serializer(value)
++        # Then check if there are serializers for its superclasses
++        for type_, serializer in registry.items():
++            if issubclass(value, type_):
++                return serializer(value)
++
++    # Then check if there's a serializer for its current class
++    serializer = registry.get(value.__class__)
++    if serializer:
++        return serializer(value)
++    # Finally, try with its superclasses
++    for type_, serializer in registry.items():
+         if isinstance(value, type_):
+-            return serializer_cls(value)
++            return serializer(value)
+     raise ValueError(
+         "Cannot serialize: %r\nThere are some values Django cannot serialize into "
+         "migration files.\nFor more, see https://docs.djangoproject.com/en/%s/"
+         "topics/migrations/#migration-serializing" % (value, get_docs_version())
+     )
++
++
++# Register built-in serializers.
++Serializer.register(bool, BaseSimpleSerializer)
++Serializer.register(bytearray, BaseSimpleSerializer)
++Serializer.register(bytes, BaseSimpleSerializer)
++Serializer.register(datetime.datetime, DatetimeDatetimeSerializer)
++Serializer.register(datetime.date, DateTimeSerializer)
++Serializer.register(datetime.time, DateTimeSerializer)
++Serializer.register(datetime.timedelta, DateTimeSerializer)
++Serializer.register(decimal.Decimal, DecimalSerializer)
++Serializer.register(enum.Enum, EnumSerializer)
++Serializer.register(float, FloatSerializer)
++Serializer.register(frozenset, FrozensetSerializer)
++Serializer.register(int, BaseSimpleSerializer)
++Serializer.register(LazyObject, BaseSimpleSerializer)
++Serializer.register(list, SequenceSerializer)
++Serializer.register(models.Field, ModelFieldSerializer)
++Serializer.register(models.Manager, ModelManagerSerializer)
++Serializer.register(Operation, OperationSerializer)
++Serializer.register(COMPILED_REGEX_TYPE, RegexSerializer)
++Serializer.register(set, SetSerializer)
++Serializer.register(SettingsReference, SettingsReferenceSerializer)
++Serializer.register(str, BaseSimpleSerializer)
++Serializer.register(tuple, TupleSerializer)
++Serializer.register(type, TypeSerializer)
++Serializer.register(uuid.UUID, UUIDSerializer)
++# Overwrite previous registration of Enum to handle Enum.choices and Enum instances
++Serializer.register(enum.EnumMeta, ChoicesSerializer)
++Serializer.register(enum.Enum, EnumSerializer)
++# Overwrite previous registration of tuple to handle functools.partial().
++Serializer.register(types.SimpleNamespace, FunctoolsPartialSerializer)
+\ No newline at end of file

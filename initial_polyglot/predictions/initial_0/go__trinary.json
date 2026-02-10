@@ -1,0 +1,8 @@
+{
+    "instance_id": "go__trinary",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/trinary.go b/trinary.go\nindex 87e69f5..bbc57db 100644\n--- a/trinary.go\n+++ b/trinary.go\n@@ -1,5 +1,20 @@\n package trinary\n \n-func ParseTrinary(arg string, want int64, ok bool) {\n-\tpanic(\"Please implement the ParseTrinary function\")\n+// ParseTrinary converts a trinary number represented as a string into its decimal equivalent.\n+// It returns the converted value and a boolean indicating a valid trinary number.\n+// If the input string contains any invalid characters (not '0', '1', or '2'),\n+// it returns 0 and false.\n+\n+func ParseTrinary(arg string) (int64, bool) {\n+\tvar result int64 = 0\n+\n+\tfor _, r := range arg {\n+\t\tdigit := r - '0'\n+\t\tif digit < 0 || digit > 2 {\n+\t\t\treturn 0, false\n+\t\t}\n+\t\tresult = result*3 + int64(digit)\n+\t}\n+\n+\treturn result, true\n }\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

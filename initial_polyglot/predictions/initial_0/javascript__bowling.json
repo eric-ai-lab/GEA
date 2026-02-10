@@ -1,0 +1,8 @@
+{
+    "instance_id": "javascript__bowling",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/bowling.js b/bowling.js\nindex 9d83338..3925fa3 100644\n--- a/bowling.js\n+++ b/bowling.js\n@@ -4,11 +4,36 @@\n //\n \n export class Bowling {\n-  roll() {\n-    throw new Error('Remove this statement and implement this function');\n+  constructor() {\n+    // This will hold all the rolls in the game\n+    this.rolls = [];\n+  }\n+\n+  roll(pins) {\n+    // Record the number of pins knocked down in this roll\n+    this.rolls.push(pins);\n   }\n \n   score() {\n-    throw new Error('Remove this statement and implement this function');\n+    let totalScore = 0;\n+    let rollIndex = 0;\n+\n+    // There are 10 frames in a game\n+    for (let frame = 0; frame < 10; frame++) {\n+      // If it's a strike\n+      if (this.rolls[rollIndex] === 10) {\n+        totalScore += 10 + this.rolls[rollIndex + 1] + this.rolls[rollIndex + 2];\n+        rollIndex += 1; // Strike consumes one roll\n+      } else if (this.rolls[rollIndex] + this.rolls[rollIndex + 1] === 10) {\n+        // Spare\n+        totalScore += 10 + this.rolls[rollIndex + 2]; // bonus: next roll\n+        rollIndex += 2;\n+      } else {\n+        // Open frame\n+        totalScore += this.rolls[rollIndex] + this.rolls[rollIndex + 1];\n+        rollIndex += 2;\n+      }\n+    }\n+    return totalScore;\n   }\n }\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

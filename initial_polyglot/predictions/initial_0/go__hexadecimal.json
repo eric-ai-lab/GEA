@@ -1,0 +1,8 @@
+{
+    "instance_id": "go__hexadecimal",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/hexadecimal.go b/hexadecimal.go\nindex 5e12c2b..e825f94 100644\n--- a/hexadecimal.go\n+++ b/hexadecimal.go\n@@ -1,5 +1,31 @@\n package hexadecimal\n \n-func ParseHex(in string, out int64, errCase string) {\n-\tpanic(\"Please implement the ParseHex function\")\n+import (\n+\t\"fmt\"\n+)\n+\n+// ParseHex converts a hexadecimal string to its decimal equivalent using first principles.\n+// It returns an error if the input string contains invalid hexadecimal characters.\n+// This function does not use any built-in or external libraries for conversion.\n+// Example: \"10af8c\" -> 1099036\n+func ParseHex(in string) (int64, error) {\n+\tvar result int64 = 0\n+\n+\tfor i := 0; i < len(in); i++ {\n+\t\tc := in[i]\n+\t\tvar digit int64\n+\t\tswitch {\n+\t\tcase c >= '0' && c <= '9':\n+\t\t\tdigit = int64(c - '0')\n+\t\tcase c >= 'a' && c <= 'f':\n+\t\t\tdigit = int64(c - 'a' + 10)\n+\t\tcase c >= 'A' && c <= 'F':\n+\t\t\tdigit = int64(c - 'A' + 10)\n+\t\tdefault:\n+\t\t\treturn 0, fmt.Errorf(\"invalid hexadecimal string: %s\", in)\n+\t\t}\n+\t\tresult = result*16 + digit\n+\t}\n+\n+\treturn result, nil\n }\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

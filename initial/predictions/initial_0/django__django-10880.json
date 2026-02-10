@@ -1,0 +1,6 @@
+{
+    "instance_id": "django__django-10880",
+    "model_name_or_path": "nerf_editwholefiles_0",
+    "model_patch": "diff --git a/django/db/models/aggregates.py b/django/db/models/aggregates.py\nindex ac0b62d0bf..6f89e5015b 100644\n--- a/django/db/models/aggregates.py\n+++ b/django/db/models/aggregates.py\n@@ -14,7 +14,7 @@ __all__ = [\n \n \n class Aggregate(Func):\n-    template = '%(function)s(%(distinct)s%(expressions)s)'\n+    template = '%(function)s(%(distinct)s %(expressions)s)'  # Note: Added space after distinct placeholder\n     contains_aggregate = True\n     name = None\n     filter_template = '%s FILTER (WHERE %%(filter)s)'\n@@ -152,4 +152,4 @@ class Variance(NumericOutputFieldMixin, Aggregate):\n         super().__init__(expression, **extra)\n \n     def _get_repr_options(self):\n-        return {**super()._get_repr_options(), 'sample': self.function == 'VAR_SAMP'}\n+        return {**super()._get_repr_options(), 'sample': self.function == 'VAR_SAMP'}\n\\ No newline at end of file\n",
+    "proposed_model_patches": []
+}

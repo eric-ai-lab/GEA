@@ -1,0 +1,20 @@
+diff --git a/django/db/models/enums.py b/django/db/models/enums.py
+index f48143ddaf..0acaaf02cb 100644
+--- a/django/db/models/enums.py
++++ b/django/db/models/enums.py
+@@ -8,6 +8,8 @@ __all__ = ['Choices', 'IntegerChoices', 'TextChoices']
+ class ChoicesMeta(enum.EnumMeta):
+     """A metaclass for creating a enum choices."""
+ 
++    do_not_call_in_templates = True
++
+     def __new__(metacls, classname, bases, classdict):
+         labels = []
+         for key in classdict._member_names:
+@@ -78,4 +80,4 @@ class TextChoices(str, Choices):
+     """Class for creating enumerated string choices."""
+ 
+     def _generate_next_value_(name, start, count, last_values):
+-        return name
++        return name
+\ No newline at end of file

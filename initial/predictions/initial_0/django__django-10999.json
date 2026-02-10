@@ -1,0 +1,6 @@
+{
+    "instance_id": "django__django-10999",
+    "model_name_or_path": "nerf_editwholefiles_0",
+    "model_patch": "diff --git a/django/utils/dateparse.py b/django/utils/dateparse.py\nindex 8d08b7d1d3..1c7bb45568 100644\n--- a/django/utils/dateparse.py\n+++ b/django/utils/dateparse.py\n@@ -29,7 +29,7 @@ datetime_re = re.compile(\n standard_duration_re = re.compile(\n     r'^'\n     r'(?:(?P<days>-?\\d+) (days?, )?)?'\n-    r'((?:(?P<hours>-?\\d+):)(?=\\d+:\\d+))?'\n+    r'((?:(?P<hours>-?\\d+):)(?=-?\\d+:-?\\d+))?'\n     r'(?:(?P<minutes>-?\\d+):)?'\n     r'(?P<seconds>-?\\d+)'\n     r'(?:\\.(?P<microseconds>\\d{1,6})\\d{0,6})?'\n@@ -143,4 +143,4 @@ def parse_duration(value):\n         if kw.get('seconds') and kw.get('microseconds') and kw['seconds'].startswith('-'):\n             kw['microseconds'] = '-' + kw['microseconds']\n         kw = {k: float(v) for k, v in kw.items() if v is not None}\n-        return days + sign * datetime.timedelta(**kw)\n+        return days + sign * datetime.timedelta(**kw)\n\\ No newline at end of file\n",
+    "proposed_model_patches": []
+}

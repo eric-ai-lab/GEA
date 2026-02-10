@@ -1,0 +1,275 @@
+diff --git a/sphinx/io.py b/sphinx/io.py
+index 4874fdf39..4a66761c1 100644
+--- a/sphinx/io.py
++++ b/sphinx/io.py
+@@ -1,15 +1,21 @@
+ """Input/Output files"""
+ from __future__ import annotations
+ 
++import os
++import re
+ from typing import TYPE_CHECKING, Any
+-
+ import docutils
+ from docutils import nodes
+ from docutils.core import Publisher
+-from docutils.io import FileInput, Input, NullOutput
++from docutils.io import FileInput, Input, NullOutput, StringInput
+ from docutils.readers import standalone
++from docutils.transforms import Transform
+ from docutils.transforms.references import DanglingReferences
+ from docutils.writers import UnfilteredWriter
++from docutils.parsers.rst import directives
++from docutils.parsers.rst.directives.misc import Include
++from docutils.utils import new_document
++from docutils.statemachine import StringList
+ 
+ from sphinx import addnodes
+ from sphinx.transforms import AutoIndexUpgrader, DoctreeReadEvent, SphinxTransformer
+@@ -26,7 +32,6 @@ from sphinx.versioning import UIDTransform
+ if TYPE_CHECKING:
+     from docutils.frontend import Values
+     from docutils.parsers import Parser
+-    from docutils.transforms import Transform
+ 
+     from sphinx.application import Sphinx
+     from sphinx.environment import BuildEnvironment
+@@ -35,118 +40,118 @@ if TYPE_CHECKING:
+ logger = logging.getLogger(__name__)
+ 
+ 
+-class SphinxBaseReader(standalone.Reader):
+-    """
+-    A base class of readers for Sphinx.
++class SphinxInclude(Include):
++    """An include directive that handles Sphinx source-read events."""
++    
++    def run(self):
++        """Handle include directive with source-read event."""
++        env = self.state.document.settings.env
++        if env is None:
++            return super().run()
++
++        try:
++            include_file = self.arguments[0]
++            rel_filename, filename = env.relfn2path(include_file)
++
++            # Set encoding for reading include file
++            encoding = self.options.get('encoding', env.config.source_encoding)
++            with open(filename, encoding=encoding) as f:
++                include_text = f.read()
++
++            # Process through source-read event
++            arg = [include_text]
++            env.events.emit('source-read', rel_filename, arg)
++            include_text = arg[0]
++
++            # Convert text to lines
++            lines = StringList(include_text.splitlines(), filename)
++            
++            # Create a temp document to parse the include
++            settings = self.state.document.settings
++            include_doc = new_document(filename, settings)
++
++            if not hasattr(env, '_sphinx_included_files'):
++                env._sphinx_included_files = set()
++            env._sphinx_included_files.add(os.path.normpath(filename))
++
++            # Parse the content
++            self.state.nested_parse(lines, 0, include_doc)
++
++            # Transfer nodes, skipping any document/section wrappers
++            for node in include_doc.children:
++                if isinstance(node, (nodes.section, nodes.document)):
++                    self.state.parent.extend(node.children)
++                else:
++                    self.state.parent.append(node)
++
++            return []
++        except Exception as err:
++            return [self.state.document.reporter.warning(
++                f'Include "{include_file}" failed: {err}', line=self.lineno)]
++
++
++class SphinxDummyWriter(UnfilteredWriter):
++    """Dummy writer module used for generating doctree."""
++    supported = ('html',)  # needed to keep "meta" nodes
++    def translate(self) -> None:
++        pass
++
+ 
+-    This replaces reporter by Sphinx's on generating document.
+-    """
++class SphinxStandaloneReader(standalone.Reader):
++    """A basic document reader for Sphinx."""
+ 
+     transforms: list[type[Transform]] = []
+ 
+     def __init__(self, *args: Any, **kwargs: Any) -> None:
+-        from sphinx.application import Sphinx
+-        if len(args) > 0 and isinstance(args[0], Sphinx):
+-            self._app = args[0]
+-            self._env = self._app.env
+-            args = args[1:]
+-
++        # Register the patched include directive
++        directives.register_directive('include', SphinxInclude)
+         super().__init__(*args, **kwargs)
+ 
+-    def setup(self, app: Sphinx) -> None:
+-        self._app = app      # hold application object only for compatibility
+-        self._env = app.env
+-
+     def get_transforms(self) -> list[type[Transform]]:
+         transforms = super().get_transforms() + self.transforms
+-
+-        # remove transforms which is not needed for Sphinx
+-        unused = [DanglingReferences]
+-        for transform in unused:
+-            if transform in transforms:
+-                transforms.remove(transform)
+-
+         return transforms
+ 
+-    def new_document(self) -> nodes.document:
+-        """
+-        Creates a new document object which has a special reporter object good
+-        for logging.
+-        """
+-        document = super().new_document()
+-        document.__class__ = addnodes.document  # replace the class with patched version
+-
+-        # substitute transformer
+-        document.transformer = SphinxTransformer(document)
+-        document.transformer.set_environment(self.settings.env)
+-
+-        # substitute reporter
+-        reporter = document.reporter
+-        document.reporter = LoggingReporter.from_reporter(reporter)
+-
+-        return document
+-
+-
+-class SphinxStandaloneReader(SphinxBaseReader):
+-    """
+-    A basic document reader for Sphinx.
+-    """
+-
+-    def setup(self, app: Sphinx) -> None:
+-        self.transforms = self.transforms + app.registry.get_transforms()
+-        super().setup(app)
+-
+     def read(self, source: Input, parser: Parser, settings: Values) -> nodes.document:
++        env = getattr(settings, 'env', None)
++        if env and isinstance(source, FileInput):
++            source_path = os.path.normpath(source.source_path)
++            if hasattr(env, '_sphinx_included_files') and source_path in env._sphinx_included_files:
++                # Skip already included files
++                document = new_document(source.source_path, settings)
++                document.reporter = LoggingReporter.from_reporter(document.reporter)
++                return document
++
++        # Process normal files
+         self.source = source
+         if not self.parser:
+             self.parser = parser
+         self.settings = settings
+-        self.input = self.read_source(settings.env)
++        self.input = self.read_source(env)
+         self.parse()
+         return self.document
+ 
+     def read_source(self, env: BuildEnvironment) -> str:
+         """Read content from source and do post-process."""
+         content = self.source.read()
++        if env and isinstance(self.source, FileInput):
++            # Only process main documents through source-read
++            source_path = os.path.normpath(self.source.source_path)
++            if not hasattr(env, '_sphinx_included_files') or source_path not in env._sphinx_included_files:
++                arg = [content]
++                env.events.emit('source-read', env.docname, arg)
++                content = arg[0]
++        return content
+ 
+-        # emit "source-read" event
+-        arg = [content]
+-        env.events.emit('source-read', env.docname, arg)
+-        return arg[0]
+-
+-
+-class SphinxI18nReader(SphinxBaseReader):
+-    """
+-    A document reader for i18n.
+-
+-    This returns the source line number of original text as current source line number
+-    to let users know where the error happened.
+-    Because the translated texts are partial and they don't have correct line numbers.
+-    """
+-
+-    def setup(self, app: Sphinx) -> None:
+-        super().setup(app)
+-
+-        self.transforms = self.transforms + app.registry.get_transforms()
+-        unused = [PreserveTranslatableMessages, Locale, RemoveTranslatableInline,
+-                  AutoIndexUpgrader, SphinxDomains, DoctreeReadEvent,
+-                  UIDTransform]
+-        for transform in unused:
+-            if transform in self.transforms:
+-                self.transforms.remove(transform)
+-
+-
+-class SphinxDummyWriter(UnfilteredWriter):
+-    """Dummy writer module used for generating doctree."""
+-
+-    supported = ('html',)  # needed to keep "meta" nodes
+-
+-    def translate(self) -> None:
+-        pass
++    def new_document(self) -> nodes.document:
++        document = super().new_document()
++        document.__class__ = addnodes.document
++        document.transformer = SphinxTransformer(document)
++        document.transformer.set_environment(self.settings.env)
++        document.reporter = LoggingReporter.from_reporter(document.reporter)
++        return document
+ 
+ 
+ def SphinxDummySourceClass(source: Any, *args: Any, **kwargs: Any) -> Any:
+-    """Bypass source object as is to cheat Publisher."""
+     return source
+ 
+ 
+@@ -159,17 +164,9 @@ class SphinxFileInput(FileInput):
+ 
+ def create_publisher(app: Sphinx, filetype: str) -> Publisher:
+     reader = SphinxStandaloneReader()
+-    reader.setup(app)
+-
+     parser = app.registry.create_source_parser(app, filetype)
+     if parser.__class__.__name__ == 'CommonMarkParser' and parser.settings_spec == ():
+-        # a workaround for recommonmark
+-        #   If recommonmark.AutoStrictify is enabled, the parser invokes reST parser
+-        #   internally.  But recommonmark-0.4.0 does not provide settings_spec for reST
+-        #   parser.  As a workaround, this copies settings_spec for RSTParser to the
+-        #   CommonMarkParser.
+         from docutils.parsers.rst import Parser as RSTParser
+-
+         parser.settings_spec = RSTParser.settings_spec
+ 
+     pub = Publisher(
+@@ -179,11 +176,11 @@ def create_publisher(app: Sphinx, filetype: str) -> Publisher:
+         source_class=SphinxFileInput,
+         destination=NullOutput(),
+     )
+-    # Propagate exceptions by default when used programmatically:
++
++    # Default settings with traceback enabled
+     defaults = {"traceback": True, **app.env.settings}
+-    # Set default settings
+     if docutils.__version_info__[:2] >= (0, 19):
+         pub.get_settings(**defaults)
+     else:
+         pub.settings = pub.setup_option_parser(**defaults).get_default_values()
+-    return pub
++    return pub
+\ No newline at end of file

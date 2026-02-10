@@ -1,0 +1,8 @@
+{
+    "instance_id": "java__series",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "",
+    "proposed_model_patches": [],
+    "eval_result": "empty_patch",
+    "success": true
+}

@@ -1,0 +1,34 @@
+diff --git a/django/db/backends/ddl_references.py b/django/db/backends/ddl_references.py
+index 44e49806f8..cf7611e979 100644
+--- a/django/db/backends/ddl_references.py
++++ b/django/db/backends/ddl_references.py
+@@ -112,12 +112,19 @@ class IndexColumns(Columns):
+         def col_str(column, idx):
+             # Index.__init__() guarantees that self.opclasses is the same
+             # length as self.columns.
+-            col = '{} {}'.format(self.quote_name(column), self.opclasses[idx])
++            quoted_col = self.quote_name(column)
++            parts = [quoted_col]
++            
++            if self.opclasses[idx]:
++                parts.append(self.opclasses[idx])
++            
+             try:
+-                col = '{} {}'.format(col, self.col_suffixes[idx])
++                if self.col_suffixes[idx]:
++                    parts.append(self.col_suffixes[idx].strip())
+             except IndexError:
+                 pass
+-            return col
++            
++            return ' '.join(parts)
+ 
+         return ', '.join(col_str(column, idx) for idx, column in enumerate(self.columns))
+ 
+@@ -191,4 +198,4 @@ class Statement(Reference):
+                 part.rename_column_references(table, old_column, new_column)
+ 
+     def __str__(self):
+-        return self.template % self.parts
++        return self.template % self.parts
+\ No newline at end of file

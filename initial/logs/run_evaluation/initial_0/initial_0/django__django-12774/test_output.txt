@@ -1,0 +1,641 @@
++ source /opt/miniconda3/bin/activate
+++ _CONDA_ROOT=/opt/miniconda3
+++ . /opt/miniconda3/etc/profile.d/conda.sh
++++ export CONDA_EXE=/opt/miniconda3/bin/conda
++++ CONDA_EXE=/opt/miniconda3/bin/conda
++++ export _CE_M=
++++ _CE_M=
++++ export _CE_CONDA=
++++ _CE_CONDA=
++++ export CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
++++ CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
++++ '[' -z '' ']'
++++ export CONDA_SHLVL=0
++++ CONDA_SHLVL=0
++++ '[' -n '' ']'
++++++ dirname /opt/miniconda3/bin/conda
+++++ dirname /opt/miniconda3/bin
++++ PATH=/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
++++ export PATH
++++ '[' -z '' ']'
++++ PS1=
+++ conda activate
+++ local cmd=activate
+++ case "$cmd" in
+++ __conda_activate activate
+++ '[' -n '' ']'
+++ local ask_conda
++++ PS1=
++++ __conda_exe shell.posix activate
++++ /opt/miniconda3/bin/conda shell.posix activate
+++ ask_conda='PS1='\''(base) '\''
+export PATH='\''/opt/miniconda3/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'\''
+export CONDA_PREFIX='\''/opt/miniconda3'\''
+export CONDA_SHLVL='\''1'\''
+export CONDA_DEFAULT_ENV='\''base'\''
+export CONDA_PROMPT_MODIFIER='\''(base) '\''
+export CONDA_EXE='\''/opt/miniconda3/bin/conda'\''
+export _CE_M='\'''\''
+export _CE_CONDA='\'''\''
+export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
+++ eval 'PS1='\''(base) '\''
+export PATH='\''/opt/miniconda3/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'\''
+export CONDA_PREFIX='\''/opt/miniconda3'\''
+export CONDA_SHLVL='\''1'\''
+export CONDA_DEFAULT_ENV='\''base'\''
+export CONDA_PROMPT_MODIFIER='\''(base) '\''
+export CONDA_EXE='\''/opt/miniconda3/bin/conda'\''
+export _CE_M='\'''\''
+export _CE_CONDA='\'''\''
+export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
++++ PS1='(base) '
++++ export PATH=/opt/miniconda3/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
++++ PATH=/opt/miniconda3/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
++++ export CONDA_PREFIX=/opt/miniconda3
++++ CONDA_PREFIX=/opt/miniconda3
++++ export CONDA_SHLVL=1
++++ CONDA_SHLVL=1
++++ export CONDA_DEFAULT_ENV=base
++++ CONDA_DEFAULT_ENV=base
++++ export 'CONDA_PROMPT_MODIFIER=(base) '
++++ CONDA_PROMPT_MODIFIER='(base) '
++++ export CONDA_EXE=/opt/miniconda3/bin/conda
++++ CONDA_EXE=/opt/miniconda3/bin/conda
++++ export _CE_M=
++++ _CE_M=
++++ export _CE_CONDA=
++++ _CE_CONDA=
++++ export CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
++++ CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
+++ __conda_hashr
+++ '[' -n '' ']'
+++ '[' -n '' ']'
+++ hash -r
++ conda activate testbed
++ local cmd=activate
++ case "$cmd" in
++ __conda_activate activate testbed
++ '[' -n '' ']'
++ local ask_conda
+++ PS1='(base) '
+++ __conda_exe shell.posix activate testbed
+++ /opt/miniconda3/bin/conda shell.posix activate testbed
++ ask_conda='PS1='\''(testbed) '\''
+export PATH='\''/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'\''
+export CONDA_PREFIX='\''/opt/miniconda3/envs/testbed'\''
+export CONDA_SHLVL='\''2'\''
+export CONDA_DEFAULT_ENV='\''testbed'\''
+export CONDA_PROMPT_MODIFIER='\''(testbed) '\''
+export CONDA_PREFIX_1='\''/opt/miniconda3'\''
+export CONDA_EXE='\''/opt/miniconda3/bin/conda'\''
+export _CE_M='\'''\''
+export _CE_CONDA='\'''\''
+export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
++ eval 'PS1='\''(testbed) '\''
+export PATH='\''/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'\''
+export CONDA_PREFIX='\''/opt/miniconda3/envs/testbed'\''
+export CONDA_SHLVL='\''2'\''
+export CONDA_DEFAULT_ENV='\''testbed'\''
+export CONDA_PROMPT_MODIFIER='\''(testbed) '\''
+export CONDA_PREFIX_1='\''/opt/miniconda3'\''
+export CONDA_EXE='\''/opt/miniconda3/bin/conda'\''
+export _CE_M='\'''\''
+export _CE_CONDA='\'''\''
+export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
+++ PS1='(testbed) '
+++ export PATH=/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ PATH=/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ export CONDA_PREFIX=/opt/miniconda3/envs/testbed
+++ CONDA_PREFIX=/opt/miniconda3/envs/testbed
+++ export CONDA_SHLVL=2
+++ CONDA_SHLVL=2
+++ export CONDA_DEFAULT_ENV=testbed
+++ CONDA_DEFAULT_ENV=testbed
+++ export 'CONDA_PROMPT_MODIFIER=(testbed) '
+++ CONDA_PROMPT_MODIFIER='(testbed) '
+++ export CONDA_PREFIX_1=/opt/miniconda3
+++ CONDA_PREFIX_1=/opt/miniconda3
+++ export CONDA_EXE=/opt/miniconda3/bin/conda
+++ CONDA_EXE=/opt/miniconda3/bin/conda
+++ export _CE_M=
+++ _CE_M=
+++ export _CE_CONDA=
+++ _CE_CONDA=
+++ export CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
+++ CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
++ __conda_hashr
++ '[' -n '' ']'
++ '[' -n '' ']'
++ hash -r
++ cd /testbed
++ sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen
++ locale-gen
+Generating locales (this might take a while)...
+  en_US.UTF-8... done
+Generation complete.
++ export LANG=en_US.UTF-8
++ LANG=en_US.UTF-8
++ export LANGUAGE=en_US:en
++ LANGUAGE=en_US:en
++ export LC_ALL=en_US.UTF-8
++ LC_ALL=en_US.UTF-8
++ git config --global --add safe.directory /testbed
++ cd /testbed
++ git status
+On branch main
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   django/db/models/query.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	bulk_patch.py
+	django/db/models/query.py.bak
+	django/db/models/query.py.new
+	django/db/models/query.py.orig
+	part1.txt
+	part2.txt
+	patch.py
+	patch.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")
++ git show
+commit 67f9d076cfc1858b94f9ed6d1a5ce2327dcc8d0d
+Author: Adam Johnson <me@adamj.eu>
+Date:   Wed Apr 22 19:28:01 2020 +0100
+
+    Avoided unnecessary recompilation of ordering clause regex in SQLCompiler.
+
+diff --git a/django/db/models/sql/compiler.py b/django/db/models/sql/compiler.py
+index 9433540d7c..05597173ee 100644
+--- a/django/db/models/sql/compiler.py
++++ b/django/db/models/sql/compiler.py
+@@ -16,9 +16,16 @@ from django.db.models.sql.query import Query, get_order_dir
+ from django.db.transaction import TransactionManagementError
+ from django.utils.functional import cached_property
+ from django.utils.hashable import make_hashable
++from django.utils.regex_helper import _lazy_re_compile
+ 
+ 
+ class SQLCompiler:
++    # Multiline ordering SQL clause may appear from RawSQL.
++    ordering_parts = _lazy_re_compile(
++        r'^(.*)\s(?:ASC|DESC).*',
++        re.MULTILINE | re.DOTALL,
++    )
++
+     def __init__(self, query, connection, using):
+         self.query = query
+         self.connection = connection
+@@ -31,8 +38,6 @@ class SQLCompiler:
+         self.select = None
+         self.annotation_col_map = None
+         self.klass_info = None
+-        # Multiline ordering SQL clause may appear from RawSQL.
+-        self.ordering_parts = re.compile(r'^(.*)\s(ASC|DESC)(.*)', re.MULTILINE | re.DOTALL)
+         self._meta_ordering = None
+ 
+     def setup_query(self):
++ git diff 67f9d076cfc1858b94f9ed6d1a5ce2327dcc8d0d
+diff --git a/django/db/models/query.py b/django/db/models/query.py
+index d9c9b0db04..180f4a41fc 100644
+--- a/django/db/models/query.py
++++ b/django/db/models/query.py
+@@ -12,17 +12,18 @@ from itertools import chain
+ from django.conf import settings
+ from django.core import exceptions
+ from django.db import (
+-    DJANGO_VERSION_PICKLE_KEY, IntegrityError, NotSupportedError, connections,
+-    router, transaction,
++    DJANGO_VERSION_PICKLE_KEY, IntegrityError, connections, router,
++    transaction,
+ )
+-from django.db.models import AutoField, DateField, DateTimeField, sql
++from django.db.models import DateField, DateTimeField, sql
+ from django.db.models.constants import LOOKUP_SEP
+ from django.db.models.deletion import Collector
+ from django.db.models.expressions import Case, Expression, F, Value, When
++from django.db.models.fields import AutoField
+ from django.db.models.functions import Cast, Trunc
+-from django.db.models.query_utils import FilteredRelation, Q
++from django.db.models.query_utils import FilteredRelation, InvalidQuery, Q
+ from django.db.models.sql.constants import CURSOR, GET_ITERATOR_CHUNK_SIZE
+-from django.db.models.utils import resolve_callables
++from django.db.utils import NotSupportedError
+ from django.utils import timezone
+ from django.utils.functional import cached_property, partition
+ from django.utils.version import get_version
+@@ -33,6 +34,9 @@ MAX_GET_RESULTS = 21
+ # The maximum number of items to display in a QuerySet.__repr__
+ REPR_OUTPUT_SIZE = 20
+ 
++# Pull into this namespace for backwards compatibility.
++EmptyResultSet = sql.EmptyResultSet
++
+ 
+ class BaseIterable:
+     def __init__(self, queryset, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
+@@ -188,7 +192,7 @@ class QuerySet:
+         self.model = model
+         self._db = using
+         self._hints = hints or {}
+-        self._query = query or sql.Query(self.model)
++        self.query = query or sql.Query(self.model)
+         self._result_cache = None
+         self._sticky_filter = False
+         self._for_write = False
+@@ -197,20 +201,6 @@ class QuerySet:
+         self._known_related_objects = {}  # {rel_field: {pk: rel_obj}}
+         self._iterable_class = ModelIterable
+         self._fields = None
+-        self._defer_next_filter = False
+-        self._deferred_filter = None
+-
+-    @property
+-    def query(self):
+-        if self._deferred_filter:
+-            negate, args, kwargs = self._deferred_filter
+-            self._filter_or_exclude_inplace(negate, *args, **kwargs)
+-            self._deferred_filter = None
+-        return self._query
+-
+-    @query.setter
+-    def query(self, value):
+-        self._query = value
+ 
+     def as_manager(cls):
+         # Address the circular dependency between `Queryset` and `Manager`.
+@@ -323,9 +313,6 @@ class QuerySet:
+         qs._fetch_all()
+         return qs._result_cache[0]
+ 
+-    def __class_getitem__(cls, *args, **kwargs):
+-        return cls
+-
+     def __and__(self, other):
+         self._merge_sanity_check(other)
+         if isinstance(other, EmptyQuerySet):
+@@ -593,8 +580,8 @@ class QuerySet:
+                 obj, created = self._create_object_from_params(kwargs, params, lock=True)
+                 if created:
+                     return obj, created
+-            for k, v in resolve_callables(defaults):
+-                setattr(obj, k, v)
++            for k, v in defaults.items():
++                setattr(obj, k, v() if callable(v) else v)
+             obj.save(using=self.db)
+         return obj, False
+ 
+@@ -605,16 +592,16 @@ class QuerySet:
+         """
+         try:
+             with transaction.atomic(using=self.db):
+-                params = dict(resolve_callables(params))
++                params = {k: v() if callable(v) else v for k, v in params.items()}
+                 obj = self.create(**params)
+             return obj, True
+-        except IntegrityError:
++        except IntegrityError as e:
+             try:
+                 qs = self.select_for_update() if lock else self
+                 return qs.get(**lookup), False
+             except self.model.DoesNotExist:
+                 pass
+-            raise
++            raise e
+ 
+     def _extract_model_params(self, defaults, **kwargs):
+         """
+@@ -712,7 +699,6 @@ class QuerySet:
+ 
+     def delete(self):
+         """Delete the records in the current QuerySet."""
+-        self._not_support_combined_queries('delete')
+         assert not self.query.is_sliced, \
+             "Cannot use 'limit' or 'offset' with delete."
+ 
+@@ -747,13 +733,7 @@ class QuerySet:
+         Delete objects found from the given queryset in single direct SQL
+         query. No signals are sent and there is no protection for cascades.
+         """
+-        query = self.query.clone()
+-        query.__class__ = sql.DeleteQuery
+-        cursor = query.get_compiler(using).execute_sql(CURSOR)
+-        if cursor:
+-            with cursor:
+-                return cursor.rowcount
+-        return 0
++        return sql.DeleteQuery(self.model).delete_qs(self, using)
+     _raw_delete.alters_data = True
+ 
+     def update(self, **kwargs):
+@@ -761,7 +741,6 @@ class QuerySet:
+         Update all elements in the current QuerySet, setting all the given
+         fields to the appropriate values.
+         """
+-        self._not_support_combined_queries('update')
+         assert not self.query.is_sliced, \
+             "Cannot update a query once a slice has been taken."
+         self._for_write = True
+@@ -878,7 +857,7 @@ class QuerySet:
+             'datefield', flat=True
+         ).distinct().filter(plain_field__isnull=False).order_by(('-' if order == 'DESC' else '') + 'datefield')
+ 
+-    def datetimes(self, field_name, kind, order='ASC', tzinfo=None, is_dst=None):
++    def datetimes(self, field_name, kind, order='ASC', tzinfo=None):
+         """
+         Return a list of datetime objects representing all available
+         datetimes for the given field_name, scoped to 'kind'.
+@@ -893,13 +872,7 @@ class QuerySet:
+         else:
+             tzinfo = None
+         return self.annotate(
+-            datetimefield=Trunc(
+-                field_name,
+-                kind,
+-                output_field=DateTimeField(),
+-                tzinfo=tzinfo,
+-                is_dst=is_dst,
+-            ),
++            datetimefield=Trunc(field_name, kind, output_field=DateTimeField(), tzinfo=tzinfo),
+             plain_field=F(field_name)
+         ).values_list(
+             'datetimefield', flat=True
+@@ -944,18 +917,11 @@ class QuerySet:
+                 "Cannot filter a query once a slice has been taken."
+ 
+         clone = self._chain()
+-        if self._defer_next_filter:
+-            self._defer_next_filter = False
+-            clone._deferred_filter = negate, args, kwargs
+-        else:
+-            clone._filter_or_exclude_inplace(negate, *args, **kwargs)
+-        return clone
+-
+-    def _filter_or_exclude_inplace(self, negate, *args, **kwargs):
+         if negate:
+-            self._query.add_q(~Q(*args, **kwargs))
++            clone.query.add_q(~Q(*args, **kwargs))
+         else:
+-            self._query.add_q(Q(*args, **kwargs))
++            clone.query.add_q(Q(*args, **kwargs))
++        return clone
+ 
+     def complex_filter(self, filter_obj):
+         """
+@@ -972,7 +938,7 @@ class QuerySet:
+             clone.query.add_q(filter_obj)
+             return clone
+         else:
+-            return self._filter_or_exclude(False, **filter_obj)
++            return self._filter_or_exclude(None, **filter_obj)
+ 
+     def _combinator_query(self, combinator, *other_qs, all=False):
+         # Clone the query to inherit the select list and everything
+@@ -1246,17 +1212,20 @@ class QuerySet:
+         if ignore_conflicts and not connections[self.db].features.supports_ignore_conflicts:
+             raise NotSupportedError('This database backend does not support ignoring conflicts.')
+         ops = connections[self.db].ops
+-        max_batch_size = max(ops.bulk_batch_size(fields, objs), 1)
+-        batch_size = min(batch_size, max_batch_size) if batch_size else max_batch_size
++        batch_size = (batch_size or max(ops.bulk_batch_size(fields, objs), 1))
+         inserted_rows = []
+         bulk_return = connections[self.db].features.can_return_rows_from_bulk_insert
+         for item in [objs[i:i + batch_size] for i in range(0, len(objs), batch_size)]:
+             if bulk_return and not ignore_conflicts:
+-                inserted_rows.extend(self._insert(
++                inserted_columns = self._insert(
+                     item, fields=fields, using=self.db,
+                     returning_fields=self.model._meta.db_returning_fields,
+                     ignore_conflicts=ignore_conflicts,
+-                ))
++                )
++                if isinstance(inserted_columns, list):
++                    inserted_rows.extend(inserted_columns)
++                else:
++                    inserted_rows.append(inserted_columns)
+             else:
+                 self._insert(item, fields=fields, using=self.db, ignore_conflicts=ignore_conflicts)
+         return inserted_rows
+@@ -1464,9 +1433,7 @@ class RawQuerySet:
+         try:
+             model_init_names, model_init_pos, annotation_fields = self.resolve_model_init_order()
+             if self.model._meta.pk.attname not in model_init_names:
+-                raise exceptions.FieldDoesNotExist(
+-                    'Raw query must include the primary key'
+-                )
++                raise InvalidQuery('Raw query must include the primary key')
+             model_cls = self.model
+             fields = [self.model_fields.get(c) for c in self.columns]
+             converters = compiler.get_converters([
+@@ -1542,16 +1509,8 @@ class Prefetch:
+         self.prefetch_through = lookup
+         # `prefetch_to` is the path to the attribute that stores the result.
+         self.prefetch_to = lookup
+-        if queryset is not None and (
+-            isinstance(queryset, RawQuerySet) or (
+-                hasattr(queryset, '_iterable_class') and
+-                not issubclass(queryset._iterable_class, ModelIterable)
+-            )
+-        ):
+-            raise ValueError(
+-                'Prefetch querysets cannot use raw(), values(), and '
+-                'values_list().'
+-            )
++        if queryset is not None and not issubclass(queryset._iterable_class, ModelIterable):
++            raise ValueError('Prefetch querysets cannot use values().')
+         if to_attr:
+             self.prefetch_to = LOOKUP_SEP.join(lookup.split(LOOKUP_SEP)[:-1] + [to_attr])
+ 
+@@ -1587,9 +1546,7 @@ class Prefetch:
+         return None
+ 
+     def __eq__(self, other):
+-        if not isinstance(other, Prefetch):
+-            return NotImplemented
+-        return self.prefetch_to == other.prefetch_to
++        return isinstance(other, Prefetch) and self.prefetch_to == other.prefetch_to
+ 
+     def __hash__(self):
+         return hash((self.__class__, self.prefetch_to))
++ source /opt/miniconda3/bin/activate
+++ _CONDA_ROOT=/opt/miniconda3
+++ . /opt/miniconda3/etc/profile.d/conda.sh
++++ export CONDA_EXE=/opt/miniconda3/bin/conda
++++ CONDA_EXE=/opt/miniconda3/bin/conda
++++ export _CE_M=
++++ _CE_M=
++++ export _CE_CONDA=
++++ _CE_CONDA=
++++ export CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
++++ CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
++++ '[' -z x ']'
+++ conda activate
+++ local cmd=activate
+++ case "$cmd" in
+++ __conda_activate activate
+++ '[' -n '' ']'
+++ local ask_conda
++++ PS1='(testbed) '
++++ __conda_exe shell.posix activate
++++ /opt/miniconda3/bin/conda shell.posix activate
+++ ask_conda='PS1='\''(base) '\''
+export PATH='\''/opt/miniconda3/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'\''
+export CONDA_PREFIX='\''/opt/miniconda3'\''
+export CONDA_SHLVL='\''3'\''
+export CONDA_DEFAULT_ENV='\''base'\''
+export CONDA_PROMPT_MODIFIER='\''(base) '\''
+export CONDA_PREFIX_2='\''/opt/miniconda3/envs/testbed'\''
+export CONDA_EXE='\''/opt/miniconda3/bin/conda'\''
+export _CE_M='\'''\''
+export _CE_CONDA='\'''\''
+export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
+++ eval 'PS1='\''(base) '\''
+export PATH='\''/opt/miniconda3/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'\''
+export CONDA_PREFIX='\''/opt/miniconda3'\''
+export CONDA_SHLVL='\''3'\''
+export CONDA_DEFAULT_ENV='\''base'\''
+export CONDA_PROMPT_MODIFIER='\''(base) '\''
+export CONDA_PREFIX_2='\''/opt/miniconda3/envs/testbed'\''
+export CONDA_EXE='\''/opt/miniconda3/bin/conda'\''
+export _CE_M='\'''\''
+export _CE_CONDA='\'''\''
+export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
++++ PS1='(base) '
++++ export PATH=/opt/miniconda3/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
++++ PATH=/opt/miniconda3/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
++++ export CONDA_PREFIX=/opt/miniconda3
++++ CONDA_PREFIX=/opt/miniconda3
++++ export CONDA_SHLVL=3
++++ CONDA_SHLVL=3
++++ export CONDA_DEFAULT_ENV=base
++++ CONDA_DEFAULT_ENV=base
++++ export 'CONDA_PROMPT_MODIFIER=(base) '
++++ CONDA_PROMPT_MODIFIER='(base) '
++++ export CONDA_PREFIX_2=/opt/miniconda3/envs/testbed
++++ CONDA_PREFIX_2=/opt/miniconda3/envs/testbed
++++ export CONDA_EXE=/opt/miniconda3/bin/conda
++++ CONDA_EXE=/opt/miniconda3/bin/conda
++++ export _CE_M=
++++ _CE_M=
++++ export _CE_CONDA=
++++ _CE_CONDA=
++++ export CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
++++ CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
+++ __conda_hashr
+++ '[' -n '' ']'
+++ '[' -n '' ']'
+++ hash -r
++ conda activate testbed
++ local cmd=activate
++ case "$cmd" in
++ __conda_activate activate testbed
++ '[' -n '' ']'
++ local ask_conda
+++ PS1='(base) '
+++ __conda_exe shell.posix activate testbed
+++ /opt/miniconda3/bin/conda shell.posix activate testbed
++ ask_conda='PS1='\''(testbed) '\''
+export PATH='\''/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'\''
+export CONDA_PREFIX='\''/opt/miniconda3/envs/testbed'\''
+export CONDA_SHLVL='\''4'\''
+export CONDA_DEFAULT_ENV='\''testbed'\''
+export CONDA_PROMPT_MODIFIER='\''(testbed) '\''
+export CONDA_PREFIX_3='\''/opt/miniconda3'\''
+export CONDA_EXE='\''/opt/miniconda3/bin/conda'\''
+export _CE_M='\'''\''
+export _CE_CONDA='\'''\''
+export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
++ eval 'PS1='\''(testbed) '\''
+export PATH='\''/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'\''
+export CONDA_PREFIX='\''/opt/miniconda3/envs/testbed'\''
+export CONDA_SHLVL='\''4'\''
+export CONDA_DEFAULT_ENV='\''testbed'\''
+export CONDA_PROMPT_MODIFIER='\''(testbed) '\''
+export CONDA_PREFIX_3='\''/opt/miniconda3'\''
+export CONDA_EXE='\''/opt/miniconda3/bin/conda'\''
+export _CE_M='\'''\''
+export _CE_CONDA='\'''\''
+export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
+++ PS1='(testbed) '
+++ export PATH=/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ PATH=/opt/miniconda3/envs/testbed/bin:/opt/miniconda3/condabin:/opt/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ export CONDA_PREFIX=/opt/miniconda3/envs/testbed
+++ CONDA_PREFIX=/opt/miniconda3/envs/testbed
+++ export CONDA_SHLVL=4
+++ CONDA_SHLVL=4
+++ export CONDA_DEFAULT_ENV=testbed
+++ CONDA_DEFAULT_ENV=testbed
+++ export 'CONDA_PROMPT_MODIFIER=(testbed) '
+++ CONDA_PROMPT_MODIFIER='(testbed) '
+++ export CONDA_PREFIX_3=/opt/miniconda3
+++ CONDA_PREFIX_3=/opt/miniconda3
+++ export CONDA_EXE=/opt/miniconda3/bin/conda
+++ CONDA_EXE=/opt/miniconda3/bin/conda
+++ export _CE_M=
+++ _CE_M=
+++ export _CE_CONDA=
+++ _CE_CONDA=
+++ export CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
+++ CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
++ __conda_hashr
++ '[' -n '' ']'
++ '[' -n '' ']'
++ hash -r
++ python -m pip install -e .
+Obtaining file:///testbed
+Requirement already satisfied: asgiref>=3.2 in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (3.4.1)
+Requirement already satisfied: pytz in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (2024.2)
+Requirement already satisfied: sqlparse>=0.2.2 in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (0.4.4)
+Requirement already satisfied: typing-extensions in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from asgiref>=3.2->Django==3.1) (4.1.1)
+Installing collected packages: Django
+  Attempting uninstall: Django
+    Found existing installation: Django 3.1
+    Uninstalling Django-3.1:
+      Successfully uninstalled Django-3.1
+  Running setup.py develop for Django
+Successfully installed Django-3.1
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
++ git checkout 67f9d076cfc1858b94f9ed6d1a5ce2327dcc8d0d tests/lookup/models.py tests/lookup/tests.py
+Updated 0 paths from 4e7c63bb29
++ git apply -v -
+Checking patch tests/lookup/models.py...
+Checking patch tests/lookup/tests.py...
+Applied patch tests/lookup/models.py cleanly.
+Applied patch tests/lookup/tests.py cleanly.
++ ./tests/runtests.py --verbosity 2 --settings=test_sqlite --parallel 1 lookup.models lookup.tests
+Traceback (most recent call last):
+  File "./tests/runtests.py", line 23, in <module>
+    from django.test import TestCase, TransactionTestCase
+  File "/testbed/django/test/__init__.py", line 3, in <module>
+    from django.test.client import (
+  File "/testbed/django/test/client.py", line 15, in <module>
+    from django.core.handlers.asgi import ASGIRequest
+  File "/testbed/django/core/handlers/asgi.py", line 11, in <module>
+    from django.core.handlers import base
+  File "/testbed/django/core/handlers/base.py", line 11, in <module>
+    from django.urls import get_resolver, set_urlconf
+  File "/testbed/django/urls/__init__.py", line 1, in <module>
+    from .base import (
+  File "/testbed/django/urls/base.py", line 9, in <module>
+    from .exceptions import NoReverseMatch, Resolver404
+  File "/testbed/django/urls/exceptions.py", line 1, in <module>
+    from django.http import Http404
+  File "/testbed/django/http/__init__.py", line 5, in <module>
+    from django.http.response import (
+  File "/testbed/django/http/response.py", line 15, in <module>
+    from django.core.serializers.json import DjangoJSONEncoder
+  File "/testbed/django/core/serializers/__init__.py", line 23, in <module>
+    from django.core.serializers.base import SerializerDoesNotExist
+  File "/testbed/django/core/serializers/base.py", line 7, in <module>
+    from django.db import models
+  File "/testbed/django/db/models/__init__.py", line 25, in <module>
+    from django.db.models.manager import Manager
+  File "/testbed/django/db/models/manager.py", line 6, in <module>
+    from django.db.models.query import QuerySet
+  File "/testbed/django/db/models/query.py", line 38, in <module>
+    EmptyResultSet = sql.EmptyResultSet
+AttributeError: module 'django.db.models.sql' has no attribute 'EmptyResultSet'
++ git checkout 67f9d076cfc1858b94f9ed6d1a5ce2327dcc8d0d tests/lookup/models.py tests/lookup/tests.py
+Updated 2 paths from 4e7c63bb29

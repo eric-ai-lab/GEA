@@ -1,0 +1,167 @@
+diff --git a/django/db/models/deletion.py b/django/db/models/deletion.py
+index 3a462f1c4c..b475477a9b 100644
+--- a/django/db/models/deletion.py
++++ b/django/db/models/deletion.py
+@@ -13,7 +13,7 @@ class ProtectedError(IntegrityError):
+ 
+ def CASCADE(collector, field, sub_objs, using):
+     collector.collect(sub_objs, source=field.remote_field.model,
+-                      source_attr=field.name, nullable=field.null)
++                     source_attr=field.name, nullable=field.null)
+     if field.null and not connections[using].features.can_defer_constraint_checks:
+         collector.add_field_update(field, None, sub_objs)
+ 
+@@ -162,7 +162,7 @@ class Collector:
+             connections[self.using].ops.bulk_batch_size([field.name], objs), 1)
+         if len(objs) > conn_batch_size:
+             return [objs[i:i + conn_batch_size]
+-                    for i in range(0, len(objs), conn_batch_size)]
++                   for i in range(0, len(objs), conn_batch_size)]
+         else:
+             return [objs]
+ 
+@@ -189,7 +189,7 @@ class Collector:
+             self.fast_deletes.append(objs)
+             return
+         new_objs = self.add(objs, source, nullable,
+-                            reverse_dependency=reverse_dependency)
++                           reverse_dependency=reverse_dependency)
+         if not new_objs:
+             return
+ 
+@@ -203,9 +203,9 @@ class Collector:
+                 if ptr:
+                     parent_objs = [getattr(obj, ptr.name) for obj in new_objs]
+                     self.collect(parent_objs, source=model,
+-                                 source_attr=ptr.remote_field.related_name,
+-                                 collect_related=False,
+-                                 reverse_dependency=True)
++                                source_attr=ptr.remote_field.related_name,
++                                collect_related=False,
++                                reverse_dependency=True)
+         if collect_related:
+             parents = model._meta.parents
+             for related in get_candidate_relations_to_delete(model._meta):
+@@ -228,37 +228,42 @@ class Collector:
+                     sub_objs = field.bulk_related_objects(new_objs, self.using)
+                     self.collect(sub_objs, source=model, nullable=True)
+ 
++    def _get_minimal_field_names(self, model):
++        """Get the minimal set of field names needed for deletion operations."""
++        fields = {'pk'}  # Always need primary key
++        meta = model._meta
++        
++        # Add any foreign key fields that are required for deletion
++        for field in meta.fields:
++            if field.remote_field and not field.null:
++                fields.add(field.attname)
++        
++        # Add any unique fields that might be needed for lookups
++        for field in meta.fields:
++            if field.unique:
++                fields.add(field.attname)
++        
++        return fields
++
+     def related_objects(self, related, objs):
+         """
+         Get a QuerySet of objects related to `objs` via the relation `related`.
+         """
++        # Get only required fields for deletion
++        minimal_fields = self._get_minimal_field_names(related.related_model)
++        
+         return related.related_model._base_manager.using(self.using).filter(
+             **{"%s__in" % related.field.name: objs}
+-        )
++        ).only(*minimal_fields)
+ 
+     def instances_with_model(self):
++        """
++        Yield (model, object) pairs for all objects that will be deleted.
++        """
+         for model, instances in self.data.items():
+             for obj in instances:
+                 yield model, obj
+ 
+-    def sort(self):
+-        sorted_models = []
+-        concrete_models = set()
+-        models = list(self.data)
+-        while len(sorted_models) < len(models):
+-            found = False
+-            for model in models:
+-                if model in sorted_models:
+-                    continue
+-                dependencies = self.dependencies.get(model._meta.concrete_model)
+-                if not (dependencies and dependencies.difference(concrete_models)):
+-                    sorted_models.append(model)
+-                    concrete_models.add(model._meta.concrete_model)
+-                    found = True
+-            if not found:
+-                return
+-        self.data = {model: self.data[model] for model in sorted_models}
+-
+     def delete(self):
+         # sort instance collections
+         for model, instances in self.data.items():
+@@ -271,15 +276,6 @@ class Collector:
+         # number of objects deleted for each model label
+         deleted_counter = Counter()
+ 
+-        # Optimize for the case with a single obj and no dependencies
+-        if len(self.data) == 1 and len(instances) == 1:
+-            instance = list(instances)[0]
+-            if self.can_fast_delete(instance):
+-                with transaction.mark_for_rollback_on_error():
+-                    count = sql.DeleteQuery(model).delete_batch([instance.pk], self.using)
+-                setattr(instance, model._meta.pk.attname, None)
+-                return count, {model._meta.label: count}
+-
+         with transaction.atomic(using=self.using, savepoint=False):
+             # send pre_delete signals
+             for model, obj in self.instances_with_model():
+@@ -298,7 +294,7 @@ class Collector:
+                 for (field, value), instances in instances_for_fieldvalues.items():
+                     query = sql.UpdateQuery(model)
+                     query.update_batch([obj.pk for obj in instances],
+-                                       {field.name: value}, self.using)
++                                     {field.name: value}, self.using)
+ 
+             # reverse instance collections
+             for instances in self.data.values():
+@@ -318,7 +314,7 @@ class Collector:
+                         )
+ 
+         # update collected instances
+-        for instances_for_fieldvalues in self.field_updates.values():
++        for model, instances_for_fieldvalues in self.field_updates.items():
+             for (field, value), instances in instances_for_fieldvalues.items():
+                 for obj in instances:
+                     setattr(obj, field.attname, value)
+@@ -326,3 +322,25 @@ class Collector:
+             for instance in instances:
+                 setattr(instance, model._meta.pk.attname, None)
+         return sum(deleted_counter.values()), dict(deleted_counter)
++
++    def sort(self):
++        """
++        Sort the models so that we delete them in the right order - models
++        with FK relationships must be deleted before the models they depend on.
++        """
++        sorted_models = []
++        concrete_models = set()
++        models = list(self.data)
++        while len(sorted_models) < len(models):
++            found = False
++            for model in models:
++                if model in sorted_models:
++                    continue
++                dependencies = self.dependencies.get(model._meta.concrete_model)
++                if not (dependencies and dependencies.difference(concrete_models)):
++                    sorted_models.append(model)
++                    concrete_models.add(model._meta.concrete_model)
++                    found = True
++            if not found:
++                return
++        self.data = {model: self.data[model] for model in sorted_models}
+\ No newline at end of file

@@ -1,0 +1,8 @@
+{
+    "instance_id": "python__hangman",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/hangman.py b/hangman.py\nindex 5f0db27..1380807 100644\n--- a/hangman.py\n+++ b/hangman.py\n@@ -7,14 +7,37 @@ STATUS_ONGOING = 'ongoing'\n \n class Hangman:\n     def __init__(self, word):\n+        self.word = word.lower()\n         self.remaining_guesses = 9\n         self.status = STATUS_ONGOING\n+        self.guessed_letters = set()\n \n     def guess(self, char):\n-        pass\n+        if self.status != STATUS_ONGOING:\n+            raise ValueError(\"The game has already ended.\")\n+\n+        # Normalize the guess\n+        char = char.lower()\n+\n+        # If letter already guessed, do nothing\n+        if char in self.guessed_letters:\n+            return\n+\n+        self.guessed_letters.add(char)\n+\n+        if char not in self.word:\n+            self.remaining_guesses -= 1\n+\n+        # Check win condition: all letters in word have been guessed\n+        if set(self.word).issubset(self.guessed_letters):\n+            self.status = STATUS_WIN\n+        # Check lose condition\n+        elif self.remaining_guesses <= 0:\n+            self.status = STATUS_LOSE\n \n     def get_masked_word(self):\n-        pass\n+        # Return the word, showing guessed letters and masking others with underscores\n+        return ''.join(letter if letter in self.guessed_letters else '_' for letter in self.word)\n \n     def get_status(self):\n-        pass\n+        return self.status\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

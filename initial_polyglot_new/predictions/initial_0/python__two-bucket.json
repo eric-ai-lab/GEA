@@ -1,0 +1,8 @@
+{
+    "instance_id": "python__two-bucket",
+    "model_name_or_path": "initial_rest_polyglot_20260115_175457_0",
+    "model_patch": "",
+    "proposed_model_patches": "",
+    "eval_result": "incomplete",
+    "success": false
+}

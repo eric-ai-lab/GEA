@@ -1,0 +1,81 @@
+__pycache__/
+.vscode
+.DS_Store
+venv/
+
+logs/
+!initial/logs/
+swe_bench/predictions/
+swe_bench/tmp_repos/
+swe_bench/repos/
+swe_bench/SWE-bench/
+swe_bench/logs/
+swe_bench/*.json
+
+evo_expr/
+output_selfimprove/
+output_dgm/
+output_peer_review/
+self_evo.md
+*.ipynb
+
+polyglot/polyglot_benchmark_metadata.json
+polyglot/polyglot-benchmark/
+polyglot/predictions/
+
+final_results/
+analysis/
+
+# Log files and directories
+*.log
+GEA_log/
+baseline_med_test_log/
+reevaluate_log/
+poly_log/
+opus_reevalute_log/
+robutness/
+transfer/
+nohup.out
+
+# Large files/images
+*.pdf
+*.png
+*.svg
+*.gif
+
+# But keep misc/ directory images
+!misc/
+!misc/*
+
+# Python temporary files
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Test and utility scripts
+test*.py
+test_*.py
+automate_medium_evaluation.py
+batch_*.py
+check_*.py
+check_*.sh
+compare_*.py
+count_agents_by_performance.py
+debug_bug.py
+evaluate_*.py
+generate_*.py
+med_test.py
+merge_*.py
+reevaluate_*.py
+replace_*.py
+
+# tests directory
+tests/
+
+# ignore directory
+ignore/
+
+# Root level markdown files except README.md
+/*.md
+!README.md

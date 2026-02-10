@@ -1,0 +1,8 @@
+{
+    "instance_id": "java__phone-number",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/src/main/java/PhoneNumber.java b/src/main/java/PhoneNumber.java\nindex 20bd0cf..fa9491d 100644\n--- a/src/main/java/PhoneNumber.java\n+++ b/src/main/java/PhoneNumber.java\n@@ -1,11 +1,26 @@\n class PhoneNumber {\n \n+    private final String cleanedNumber;\n+\n     PhoneNumber(String numberString) {\n-        throw new UnsupportedOperationException(\"Delete this statement and write your own implementation.\");\n+        // Remove all non-digit characters\n+        String digits = numberString.replaceAll(\"\\\\D\", \"\");\n+        \n+        // Remove country code if present\n+        if (digits.length() == 11 && digits.charAt(0) == '1') {\n+            digits = digits.substring(1);\n+        }\n+        \n+        // Validate that we have exactly 10 digits now, and that the area code and exchange code are valid\n+        if (digits.length() != 10 || digits.charAt(0) < '2' || digits.charAt(3) < '2') {\n+            cleanedNumber = \"0000000000\";\n+        } else {\n+            cleanedNumber = digits;\n+        }\n     }\n \n     String getNumber() {\n-        throw new UnsupportedOperationException(\"Delete this statement and write your own implementation.\");\n+        return cleanedNumber;\n     }\n \n-}\n\\ No newline at end of file\n+}\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

@@ -1,0 +1,8 @@
+{
+    "instance_id": "javascript__palindrome-products",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/palindrome-products.js b/palindrome-products.js\nindex 9af6b5d..521f191 100644\n--- a/palindrome-products.js\n+++ b/palindrome-products.js\n@@ -4,7 +4,42 @@\n //\n \n export class Palindromes {\n-  static generate() {\n-    throw new Error('Remove this statement and implement this function');\n+  static generate({ min, max }) {\n+    if (min > max) {\n+      throw new Error('min must be <= max');\n+    }\n+\n+    const palindromes = new Map();\n+\n+    // Generate all unique pairs (i, j) such that i <= j\n+    for (let i = min; i <= max; i++) {\n+      for (let j = i; j <= max; j++) {\n+        const product = i * j;\n+        if (Palindromes.isPalindrome(product)) {\n+          if (!palindromes.has(product)) {\n+            palindromes.set(product, []);\n+          }\n+          palindromes.get(product).push([i, j]);\n+        }\n+      }\n+    }\n+\n+    if (palindromes.size === 0) {\n+      throw new Error(`No palindromes found in the range ${min} to ${max}`);\n+    }\n+\n+    const products = Array.from(palindromes.keys()).sort((a, b) => a - b);\n+    const smallestValue = products[0];\n+    const largestValue = products[products.length - 1];\n+\n+    return {\n+      smallest: { value: smallestValue, factors: palindromes.get(smallestValue) },\n+      largest: { value: largestValue, factors: palindromes.get(largestValue) }\n+    };\n+  }\n+\n+  static isPalindrome(num) {\n+    const str = num.toString();\n+    return str === str.split('').reverse().join('');\n   }\n }\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

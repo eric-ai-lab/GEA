@@ -1,0 +1,8 @@
+{
+    "instance_id": "go__octal",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/octal.go b/octal.go\nindex 9ed3def..561dd37 100644\n--- a/octal.go\n+++ b/octal.go\n@@ -1,5 +1,32 @@\n package octal\n \n+import \"strconv\"\n+\n+// ParseOctal converts an octal string to its decimal equivalent using first principles.\n+// It treats any invalid octal digit as an error condition and returns a result of 0.\n+// The function compares the computed result to the provided expectedNum.\n+// If the error state (invalid digit found) does not match the expectErr flag, or if the computed result doesn't match the expectedNum,\n+// the function panics.\n+\n func ParseOctal(input string, expectedNum int64, expectErr bool) {\n-\tpanic(\"Please implement the ParseOctal function\")\n+\tvar result int64\n+\terr := false\n+\n+\tfor i := 0; i < len(input); i++ {\n+\t\tc := input[i]\n+\t\tif c < '0' || c > '7' {\n+\t\t\terr = true\n+\t\t\tresult = 0 // According to the problem, treat invalid input as octal 0\n+\t\t\tbreak\n+\t\t}\n+\t\tresult = result*8 + int64(c-'0')\n+\t}\n+\n+\tif err != expectErr {\n+\t\tpanic(\"Error expectation mismatch: got error = \" + strconv.FormatBool(err) + \" but expected error = \" + strconv.FormatBool(expectErr))\n+\t}\n+\n+\tif result != expectedNum {\n+\t\tpanic(\"Incorrect conversion: expected \" + strconv.FormatInt(expectedNum, 10) + \" but got \" + strconv.FormatInt(result, 10))\n+\t}\n }\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}

@@ -1,0 +1,169 @@
+diff --git a/sphinx/builders/gettext.py b/sphinx/builders/gettext.py
+index e8bc547b7..e2f45d548 100644
+--- a/sphinx/builders/gettext.py
++++ b/sphinx/builders/gettext.py
+@@ -32,8 +32,10 @@ class Message:
+     """An entry of translatable message."""
+     def __init__(self, text: str, locations: List[Tuple[str, int]], uuids: List[str]):
+         self.text = text
+-        self.locations = locations
+-        self.uuids = uuids
++        # Remove duplicate locations while preserving order
++        seen = set()
++        self.locations = [x for x in locations if not (x in seen or seen.add(x))]  # type: ignore
++        self.uuids = [uuid for i, uuid in enumerate(uuids) if locations[i] not in seen]  # Remove UUIDs from duplicate locations
+ 
+ 
+ class Catalog:
+@@ -55,10 +57,25 @@ class Catalog:
+             self.metadata[msg] = []
+         self.metadata[msg].append((origin.source, origin.line, origin.uid))  # type: ignore
+ 
++    def merge(self, other: "Catalog") -> None:
++        """Merge another catalog into this one."""
++        for msg in other.messages:
++            if msg not in self.metadata:
++                self.messages.append(msg)
++                self.metadata[msg] = []
++            self.metadata[msg].extend(other.metadata[msg])
++
+     def __iter__(self) -> Generator[Message, None, None]:
+         for message in self.messages:
+-            positions = [(source, line) for source, line, uuid in self.metadata[message]]
+-            uuids = [uuid for source, line, uuid in self.metadata[message]]
++            positions = []
++            uuids = []
++            seen = set()
++            for source, line, uuid in self.metadata[message]:
++                location = (source, line)
++                if location not in seen:
++                    positions.append(location)
++                    uuids.append(uuid)
++                    seen.add(location)
+             yield Message(message, positions, uuids)
+ 
+ 
+@@ -119,7 +136,7 @@ class I18nBuilder(Builder):
+     def init(self) -> None:
+         super().init()
+         self.env.set_versioning_method(self.versioning_method,
+-                                       self.env.config.gettext_uuid)
++                                   self.env.config.gettext_uuid)
+         self.tags = I18nTags()
+         self.catalogs: DefaultDict[str, Catalog] = defaultdict(Catalog)
+ 
+@@ -136,7 +153,12 @@ class I18nBuilder(Builder):
+         return
+ 
+     def write_doc(self, docname: str, doctree: nodes.document) -> None:
+-        catalog = self.catalogs[docname_to_domain(docname, self.config.gettext_compact)]
++        if isinstance(self.config.gettext_compact, str):
++            # When gettext_compact is a string value, all messages go into that catalog
++            domain = self.config.gettext_compact
++        else:
++            domain = docname_to_domain(docname, self.config.gettext_compact)
++        catalog = self.catalogs[domain]
+ 
+         for toctree in self.env.tocs[docname].findall(addnodes.toctree):
+             for node, msg in extract_messages(toctree):
+@@ -214,6 +236,7 @@ class MessageCatalogBuilder(I18nBuilder):
+         super().init()
+         self.create_template_bridge()
+         self.templates.init(self)
++        ensuredir(self.outdir)
+ 
+     def _collect_templates(self) -> Set[str]:
+         template_files = set()
+@@ -235,20 +258,33 @@ class MessageCatalogBuilder(I18nBuilder):
+         extract_translations = self.templates.environment.extract_translations
+ 
+         for template in status_iterator(files, __('reading templates... '), "purple",
+-                                        len(files), self.app.verbosity):
++                                    len(files), self.app.verbosity):
+             try:
+                 with open(template, encoding='utf-8') as f:
+                     context = f.read()
+                 for line, _meth, msg in extract_translations(context):
+                     origin = MsgOrigin(template, line)
+-                    self.catalogs['sphinx'].add(msg, origin)
++                    if isinstance(self.config.gettext_compact, str):
++                        self.catalogs[self.config.gettext_compact].add(msg, origin)
++                    else:
++                        self.catalogs['sphinx'].add(msg, origin)
+             except Exception as exc:
+                 raise ThemeError('%s: %r' % (template, exc)) from exc
+ 
+-    def build(self, docnames: Iterable[str], summary: str = None, method: str = 'update') -> None:  # NOQA
++    def build(self, docnames: Iterable[str], summary: str = None, method: str = 'update') -> None:
++        if isinstance(self.config.gettext_compact, str):
++            self.catalogs.clear()
++            self.catalogs = defaultdict(Catalog)
++
+         self._extract_from_template()
+         super().build(docnames, summary, method)
+ 
++        # In 'string' gettext_compact mode, ensure the catalog exists even if empty
++        if isinstance(self.config.gettext_compact, str):
++            catalog_name = self.config.gettext_compact
++            if catalog_name not in self.catalogs:
++                self.catalogs[catalog_name] = Catalog()
++
+     def finish(self) -> None:
+         super().finish()
+         context = {
+@@ -261,27 +297,34 @@ class MessageCatalogBuilder(I18nBuilder):
+             'display_location': self.config.gettext_location,
+             'display_uuid': self.config.gettext_uuid,
+         }
+-        for textdomain, catalog in status_iterator(self.catalogs.items(),
+-                                                   __("writing message catalogs... "),
+-                                                   "darkgreen", len(self.catalogs),
+-                                                   self.app.verbosity,
+-                                                   lambda textdomain__: textdomain__[0]):
+-            # noop if config.gettext_compact is set
+-            ensuredir(path.join(self.outdir, path.dirname(textdomain)))
+ 
+-            context['messages'] = list(catalog)
+-            content = GettextRenderer(outdir=self.outdir).render('message.pot_t', context)
++        renderer = GettextRenderer(outdir=self.outdir)
++
++        for textdomain, catalog in status_iterator(
++                sorted(self.catalogs.items()), __("writing message catalogs... "),
++                "darkgreen", len(self.catalogs), self.app.verbosity):
++            
++            # Always write compact catalog directly to the output directory
++            if isinstance(self.config.gettext_compact, str):
++                outfilename = path.join(self.outdir, textdomain + '.pot')
++            else:
++                # Handle subdirectories for non-compact mode
++                outfilename = path.join(self.outdir, textdomain + '.pot')
++                if outfilename.endswith('/index.pot'):
++                    outfilename = outfilename[:-9] + '.pot'
++                dirpath = path.dirname(outfilename)
++                ensuredir(dirpath)
+ 
+-            pofn = path.join(self.outdir, textdomain + '.pot')
+-            if should_write(pofn, content):
+-                with open(pofn, 'w', encoding='utf-8') as pofile:
++            context['messages'] = list(catalog)
++            content = renderer.render('message.pot_t', context)
++            if should_write(outfilename, content):
++                with open(outfilename, 'w', encoding='utf-8') as pofile:
+                     pofile.write(content)
+ 
+ 
+ def setup(app: Sphinx) -> Dict[str, Any]:
+     app.add_builder(MessageCatalogBuilder)
+-
+-    app.add_config_value('gettext_compact', True, 'gettext', {bool, str})
++    app.add_config_value('gettext_compact', True, 'gettext')
+     app.add_config_value('gettext_location', True, 'gettext')
+     app.add_config_value('gettext_uuid', False, 'gettext')
+     app.add_config_value('gettext_auto_build', True, 'env')
+@@ -293,4 +336,4 @@ def setup(app: Sphinx) -> Dict[str, Any]:
+         'version': 'builtin',
+         'parallel_read_safe': True,
+         'parallel_write_safe': True,
+-    }
++    }
+\ No newline at end of file

@@ -1,0 +1,20 @@
+diff --git a/django/db/models/aggregates.py b/django/db/models/aggregates.py
+index ac0b62d0bf..6f89e5015b 100644
+--- a/django/db/models/aggregates.py
++++ b/django/db/models/aggregates.py
+@@ -14,7 +14,7 @@ __all__ = [
+ 
+ 
+ class Aggregate(Func):
+-    template = '%(function)s(%(distinct)s%(expressions)s)'
++    template = '%(function)s(%(distinct)s %(expressions)s)'  # Note: Added space after distinct placeholder
+     contains_aggregate = True
+     name = None
+     filter_template = '%s FILTER (WHERE %%(filter)s)'
+@@ -152,4 +152,4 @@ class Variance(NumericOutputFieldMixin, Aggregate):
+         super().__init__(expression, **extra)
+ 
+     def _get_repr_options(self):
+-        return {**super()._get_repr_options(), 'sample': self.function == 'VAR_SAMP'}
++        return {**super()._get_repr_options(), 'sample': self.function == 'VAR_SAMP'}
+\ No newline at end of file

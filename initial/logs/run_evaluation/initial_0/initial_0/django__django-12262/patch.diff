@@ -1,0 +1,29 @@
+diff --git a/django/template/library.py b/django/template/library.py
+index 20bc86dac8..b6ef802fee 100644
+--- a/django/template/library.py
++++ b/django/template/library.py
+@@ -255,13 +255,16 @@ def parse_bits(parser, bits, params, varargs, varkw, defaults,
+         kwarg for kwarg in kwonly
+         if not kwonly_defaults or kwarg not in kwonly_defaults
+     ]
++
++    valid_param_set = set(params + list(kwonly))
++    
+     for bit in bits:
+         # First we try to extract a potential kwarg from the bit
+         kwarg = token_kwargs([bit], parser)
+         if kwarg:
+             # The kwarg was successfully extracted
+             param, value = kwarg.popitem()
+-            if param not in params and param not in unhandled_kwargs and varkw is None:
++            if param not in valid_param_set and varkw is None:
+                 # An unexpected keyword argument was supplied
+                 raise TemplateSyntaxError(
+                     "'%s' received unexpected keyword argument '%s'" %
+@@ -325,4 +328,4 @@ def import_library(name):
+     except AttributeError:
+         raise InvalidTemplateLibrary(
+             "Module  %s does not have a variable named 'register'" % name,
+-        )
++        )
+\ No newline at end of file

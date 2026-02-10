@@ -1,0 +1,8 @@
+{
+    "instance_id": "javascript__space-age",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/space-age.js b/space-age.js\nindex 4b53e05..8c2d843 100644\n--- a/space-age.js\n+++ b/space-age.js\n@@ -1,8 +1,22 @@\n-//\n-// This is only a SKELETON file for the 'Space Age' exercise. It's been provided as a\n-// convenience to get you started writing code faster.\n-//\n+const SECONDS_IN_EARTH_YEAR = 31557600;\n \n-export const age = () => {\n-  throw new Error('Remove this statement and implement this function');\n+const orbitalPeriods = {\n+  mercury: 0.2408467,\n+  venus: 0.61519726,\n+  earth: 1.0,\n+  mars: 1.8808158,\n+  jupiter: 11.862615,\n+  saturn: 29.447498,\n+  uranus: 84.016846,\n+  neptune: 164.79132\n+};\n+\n+export const age = (planet, seconds) => {\n+  const period = orbitalPeriods[planet.toLowerCase()];\n+  if (!period) {\n+    throw new Error(`Invalid planet: ${planet}`);\n+  }\n+  const ageInYears = seconds / (SECONDS_IN_EARTH_YEAR * period);\n+  // Return age rounded to 2 decimal places\n+  return Number(ageInYears.toFixed(2));\n };\n",
+    "proposed_model_patches": [],
+    "eval_result": "resolved",
+    "success": true
+}
