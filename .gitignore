@@ -79,3 +79,14 @@ ignore/
 # Root level markdown files except README.md
 /*.md
 !README.md
+
+# Local/private initial polyglot variants and scripts (do not push)
+initial_polyglot_new/
+initial_polyglot_1/
+initial_polyglot_new1/
+cleanup_containers.sh
+quick_fix_oom.py
+requirements_dev.txt
+run_dgm.sh
+self_improve_step_backup.py
+setup_permanent_api_keys.sh

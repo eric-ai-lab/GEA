@@ -1,8 +1,0 @@
-{
-    "instance_id": "rust__alphametics",
-    "model_name_or_path": "initial_polyglot",
-    "model_patch": "",
-    "proposed_model_patches": "",
-    "eval_result": "incomplete",
-    "success": false
-}
