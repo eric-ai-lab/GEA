@@ -85,6 +85,7 @@ initial_polyglot_new/
 initial_polyglot_1/
 initial_polyglot_new1/
 cleanup_containers.sh
+fix_venv.sh
 quick_fix_oom.py
 requirements_dev.txt
 run_dgm.sh
