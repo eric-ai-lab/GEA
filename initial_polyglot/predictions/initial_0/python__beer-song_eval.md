@@ -1,13 +1,9 @@
 + pytest -rA --tb=long
-/opt/miniconda3/lib/python3.11/site-packages/pytest_asyncio/plugin.py:217: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
-The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
-
-  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
 ============================= test session starts ==============================
-platform linux -- Python 3.11.5, pytest-8.3.5, pluggy-1.5.0
+platform linux -- Python 3.11.5, pytest-9.0.2, pluggy-1.6.0
 rootdir: /testbed
-plugins: asyncio-0.26.0, anyio-4.9.0
-asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+plugins: asyncio-1.3.0, anyio-4.12.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 collected 8 items
 
 beer_song_test.py FFFFFFFF                                               [100%]
@@ -432,4 +428,4 @@ FAILED beer_song_test.py::BeerSongTest::test_last_three_verses - AssertionErr...
 FAILED beer_song_test.py::BeerSongTest::test_verse_with_0_bottles - Assertion...
 FAILED beer_song_test.py::BeerSongTest::test_verse_with_1_bottle - AssertionE...
 FAILED beer_song_test.py::BeerSongTest::test_verse_with_2_bottles - Assertion...
-============================== 8 failed in 0.20s ===============================
+============================== 8 failed in 0.05s ===============================

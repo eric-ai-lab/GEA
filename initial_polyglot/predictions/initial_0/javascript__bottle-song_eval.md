@@ -9,19 +9,19 @@
 > test
 > jest ./*
 
-FAIL ./bottle-song.spec.js (5.136 s)
+FAIL ./bottle-song.spec.js
   Bottle Song
     verse
       single verse
-        ✕ first generic verse (39 ms)
+        ✕ first generic verse (4 ms)
         ✕ last generic verse (1 ms)
         ✕ verse with 2 bottles (1 ms)
-        ✕ verse with 1 bottle (4 ms)
+        ✕ verse with 1 bottle (1 ms)
     lyrics
       multiple verses
-        ✕ first two verses (2 ms)
+        ✕ first two verses (1 ms)
         ✕ last three verses (1 ms)
-        ✕ all verses (9 ms)
+        ✕ all verses
 
   ● Bottle Song › verse › single verse › first generic verse
 
@@ -31,7 +31,7 @@ FAIL ./bottle-song.spec.js (5.136 s)
     Received: "Ten green bottles hanging on the wall,
     Ten green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Nine green bottles hanging on the wall."
+    There'll be nine green bottles hanging on the wall."
 
       11 |           `There'll be nine green bottles hanging on the wall.`,
       12 |         ];
@@ -51,7 +51,7 @@ FAIL ./bottle-song.spec.js (5.136 s)
     Received: "Three green bottles hanging on the wall,
     Three green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Two green bottles hanging on the wall."
+    There'll be two green bottles hanging on the wall."
 
       21 |           `There'll be two green bottles hanging on the wall.`,
       22 |         ];
@@ -111,11 +111,11 @@ FAIL ./bottle-song.spec.js (5.136 s)
     Received: "Ten green bottles hanging on the wall,
     Ten green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Nine green bottles hanging on the wall.·
+    There'll be nine green bottles hanging on the wall.·
     Nine green bottles hanging on the wall,
     Nine green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Eight green bottles hanging on the wall."
+    There'll be eight green bottles hanging on the wall."
 
       60 |           `There'll be eight green bottles hanging on the wall.`,
       61 |         ];
@@ -135,7 +135,7 @@ FAIL ./bottle-song.spec.js (5.136 s)
     Received: "Three green bottles hanging on the wall,
     Three green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Two green bottles hanging on the wall.·
+    There'll be two green bottles hanging on the wall.·
     Two green bottles hanging on the wall,
     Two green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
@@ -163,35 +163,35 @@ FAIL ./bottle-song.spec.js (5.136 s)
     Received: "Ten green bottles hanging on the wall,
     Ten green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Nine green bottles hanging on the wall.·
+    There'll be nine green bottles hanging on the wall.·
     Nine green bottles hanging on the wall,
     Nine green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Eight green bottles hanging on the wall.·
+    There'll be eight green bottles hanging on the wall.·
     Eight green bottles hanging on the wall,
     Eight green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Seven green bottles hanging on the wall.·
+    There'll be seven green bottles hanging on the wall.·
     Seven green bottles hanging on the wall,
     Seven green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Six green bottles hanging on the wall.·
+    There'll be six green bottles hanging on the wall.·
     Six green bottles hanging on the wall,
     Six green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Five green bottles hanging on the wall.·
+    There'll be five green bottles hanging on the wall.·
     Five green bottles hanging on the wall,
     Five green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Four green bottles hanging on the wall.·
+    There'll be four green bottles hanging on the wall.·
     Four green bottles hanging on the wall,
     Four green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Three green bottles hanging on the wall.·
+    There'll be three green bottles hanging on the wall.·
     Three green bottles hanging on the wall,
     Three green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
-    There'll be Two green bottles hanging on the wall.·
+    There'll be two green bottles hanging on the wall.·
     Two green bottles hanging on the wall,
     Two green bottles hanging on the wall,
     And if one green bottle should accidentally fall,
@@ -214,10 +214,5 @@ FAIL ./bottle-song.spec.js (5.136 s)
 Test Suites: 1 failed, 1 total
 Tests:       7 failed, 7 total
 Snapshots:   0 total
-Time:        5.324 s
-Ran all test suites matching /.\/LICENSE|.\/babel.config.js|.\/bottle-song.js|.\/bottle-song.spec.js|.\/eval.sh|.\/node_modules|.\/package-lock.json|.\/package.json/i.
-npm notice
-npm notice New major version of npm available! 10.8.2 -> 11.3.0
-npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.3.0
-npm notice To update run: npm install -g npm@11.3.0
-npm notice
+Time:        0.695 s
+Ran all test suites matching ./LICENSE|./babel.config.js|./bottle-song.js|./bottle-song.spec.js|./eval.sh|./node_modules|./package-lock.json|./package.json.

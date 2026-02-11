@@ -1,473 +1,69 @@
 + cargo test -- --include-ignored
    Compiling bowling v1.2.0 (/testbed)
-error[E0433]: failed to resolve: use of undeclared type `Error`
-  --> tests/bowling.rs:14:35
-   |
-14 |     assert_eq!(game.roll(11), Err(Error::NotEnoughPinsLeft));
-   |                                   ^^^^^ use of undeclared type `Error`
-   |
-help: consider importing one of these items
-   |
-1  + use std::error::Error;
-   |
-1  + use std::fmt::Error;
-   |
-1  + use std::io::Error;
-   |
-1  + use core::error::Error;
-   |
-     and 1 other candidate
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running unittests src/lib.rs (target/debug/deps/bowling-b320769701906fad)
 
-error[E0433]: failed to resolve: use of undeclared type `Error`
-  --> tests/bowling.rs:61:34
-   |
-61 |     assert_eq!(game.roll(0), Err(Error::GameComplete));
-   |                                  ^^^^^ use of undeclared type `Error`
-   |
-help: consider importing one of these items
-   |
-1  + use std::error::Error;
-   |
-1  + use std::fmt::Error;
-   |
-1  + use std::io::Error;
-   |
-1  + use core::error::Error;
-   |
-     and 1 other candidate
+running 0 tests
 
-error[E0433]: failed to resolve: use of undeclared type `Error`
-   --> tests/bowling.rs:284:34
-    |
-284 |     assert_eq!(game.roll(6), Err(Error::NotEnoughPinsLeft));
-    |                                  ^^^^^ use of undeclared type `Error`
-    |
-help: consider importing one of these items
-    |
-1   + use std::error::Error;
-    |
-1   + use std::fmt::Error;
-    |
-1   + use std::io::Error;
-    |
-1   + use core::error::Error;
-    |
-      and 1 other candidate
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-error[E0433]: failed to resolve: use of undeclared type `Error`
-   --> tests/bowling.rs:298:35
-    |
-298 |     assert_eq!(game.roll(11), Err(Error::NotEnoughPinsLeft));
-    |                                   ^^^^^ use of undeclared type `Error`
-    |
-help: consider importing one of these items
-    |
-1   + use std::error::Error;
-    |
-1   + use std::fmt::Error;
-    |
-1   + use std::io::Error;
-    |
-1   + use core::error::Error;
-    |
-      and 1 other candidate
+     Running tests/bowling.rs (target/debug/deps/bowling-a3910bd408639e57)
 
-error[E0433]: failed to resolve: use of undeclared type `Error`
-   --> tests/bowling.rs:313:34
-    |
-313 |     assert_eq!(game.roll(6), Err(Error::NotEnoughPinsLeft));
-    |                                  ^^^^^ use of undeclared type `Error`
-    |
-help: consider importing one of these items
-    |
-1   + use std::error::Error;
-    |
-1   + use std::fmt::Error;
-    |
-1   + use std::io::Error;
-    |
-1   + use core::error::Error;
-    |
-      and 1 other candidate
+running 31 tests
+test a_game_score_is_none_if_fewer_than_ten_frames_have_been_rolled ... ok
+test a_game_score_is_some_if_ten_frames_have_been_rolled ... ok
+test a_roll_is_err_if_the_game_is_done ... ok
+test a_spare_with_the_two_roll_bonus_does_not_get_a_bonus_roll ... ok
+test a_strike_earns_ten_points_in_a_frame_with_a_single_roll ... ok
+test a_strike_in_the_last_frame_earns_a_two_roll_bonus_that_is_counted_once ... ok
+test a_strike_with_the_one_roll_bonus_after_a_spare_in_the_last_frame_does_not_get_a_bonus ... ok
+test all_strikes_is_a_perfect_score_of_300 ... ok
+test cannot_roll_after_bonus_roll_for_spare ... ok
+test cannot_roll_after_bonus_roll_for_strike ... ok
+test consecutive_spares_each_get_a_one_roll_bonus ... ok
+test consecutive_strikes_each_get_the_two_roll_bonus ... ok
+test first_bonus_ball_after_a_final_strike_cannot_score_an_invalid_number_of_pins ... ok
+test if_the_last_frame_is_a_spare_you_cannot_create_a_score_before_extra_roll_is_taken ... ok
+test if_the_last_frame_is_a_spare_you_get_one_extra_roll_that_is_scored_once ... ok
+test if_the_last_frame_is_a_strike_you_cannot_score_before_the_extra_rolls_are_taken ... ok
+test last_two_strikes_followed_by_only_last_bonus_with_non_strike_points ... ok
+test points_scored_in_the_roll_after_a_spare_are_counted_twice_as_a_bonus ... ok
+test points_scored_in_the_two_rolls_after_a_strike_are_counted_twice_as_a_bonus ... ok
+test roll_returns_a_result ... ok
+test second_bonus_ball_after_a_final_strike_cannot_score_an_invalid_number_of_pins_even_if_first_is_strike ... ok
+test spare_in_the_first_frame_followed_by_zeros ... ok
+test strikes_with_the_two_roll_bonus_do_not_get_a_bonus_roll ... ok
+test ten_frames_without_a_strike_or_spare ... ok
+test the_two_balls_after_a_final_strike_can_be_a_strike_and_non_strike ... ok
+test the_two_balls_after_a_final_strike_cannot_be_a_non_strike_followed_by_a_strike ... FAILED
+test the_two_balls_after_a_final_strike_cannot_score_an_invalid_number_of_pins ... FAILED
+test twenty_zero_pin_rolls_scores_zero ... ok
+test you_cannot_roll_more_than_ten_pins_in_a_single_frame ... ok
+test you_cannot_roll_more_than_ten_pins_in_a_single_roll ... ok
+test you_cannot_score_a_game_with_no_rolls ... ok
 
-error[E0433]: failed to resolve: use of undeclared type `Error`
-   --> tests/bowling.rs:343:35
-    |
-343 |     assert_eq!(game.roll(10), Err(Error::NotEnoughPinsLeft));
-    |                                   ^^^^^ use of undeclared type `Error`
-    |
-help: consider importing one of these items
-    |
-1   + use std::error::Error;
-    |
-1   + use std::fmt::Error;
-    |
-1   + use std::io::Error;
-    |
-1   + use core::error::Error;
-    |
-      and 1 other candidate
+failures:
 
-error[E0433]: failed to resolve: use of undeclared type `Error`
-   --> tests/bowling.rs:359:35
-    |
-359 |     assert_eq!(game.roll(11), Err(Error::NotEnoughPinsLeft));
-    |                                   ^^^^^ use of undeclared type `Error`
-    |
-help: consider importing one of these items
-    |
-1   + use std::error::Error;
-    |
-1   + use std::fmt::Error;
-    |
-1   + use std::io::Error;
-    |
-1   + use core::error::Error;
-    |
-      and 1 other candidate
+---- the_two_balls_after_a_final_strike_cannot_be_a_non_strike_followed_by_a_strike stdout ----
 
-error[E0433]: failed to resolve: use of undeclared type `Error`
-   --> tests/bowling.rs:416:34
-    |
-416 |     assert_eq!(game.roll(2), Err(Error::GameComplete));
-    |                                  ^^^^^ use of undeclared type `Error`
-    |
-help: consider importing one of these items
-    |
-1   + use std::error::Error;
-    |
-1   + use std::fmt::Error;
-    |
-1   + use std::io::Error;
-    |
-1   + use core::error::Error;
-    |
-      and 1 other candidate
+thread 'the_two_balls_after_a_final_strike_cannot_be_a_non_strike_followed_by_a_strike' (5590) panicked at tests/bowling.rs:343:5:
+assertion `left == right` failed
+  left: Ok(())
+ right: Err(NotEnoughPinsLeft)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
-error[E0433]: failed to resolve: use of undeclared type `Error`
-   --> tests/bowling.rs:432:34
-    |
-432 |     assert_eq!(game.roll(2), Err(Error::GameComplete));
-    |                                  ^^^^^ use of undeclared type `Error`
-    |
-help: consider importing one of these items
-    |
-1   + use std::error::Error;
-    |
-1   + use std::fmt::Error;
-    |
-1   + use std::io::Error;
-    |
-1   + use core::error::Error;
-    |
-      and 1 other candidate
+---- the_two_balls_after_a_final_strike_cannot_score_an_invalid_number_of_pins stdout ----
 
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
- --> tests/bowling.rs:6:26
-  |
-6 |     assert!(game.roll(0).is_ok());
-  |                          ^^^^^ method not found in `()`
-  |
-note: method `roll` modifies its receiver in-place
- --> tests/bowling.rs:6:18
-  |
-6 |     assert!(game.roll(0).is_ok());
-  |                  ^^^^ this call modifies `game` in-place
+thread 'the_two_balls_after_a_final_strike_cannot_score_an_invalid_number_of_pins' (5591) panicked at tests/bowling.rs:313:5:
+assertion `left == right` failed
+  left: Ok(())
+ right: Err(NotEnoughPinsLeft)
 
-error[E0599]: no method named `is_some` found for type `u32` in the current scope
-  --> tests/bowling.rs:27:26
-   |
-27 |     assert!(game.score().is_some());
-   |                          ^^^^^^^ method not found in `u32`
 
-error[E0308]: mismatched types
-  --> tests/bowling.rs:35:30
-   |
-35 |     assert_eq!(game.score(), None);
-   |                              ^^^^ expected `u32`, found `Option<_>`
-   |
-   = note: expected type `u32`
-              found enum `Option<_>`
+failures:
+    the_two_balls_after_a_final_strike_cannot_be_a_non_strike_followed_by_a_strike
+    the_two_balls_after_a_final_strike_cannot_score_an_invalid_number_of_pins
 
-error[E0308]: mismatched types
-  --> tests/bowling.rs:48:30
-   |
-48 |     assert_eq!(game.score(), None);
-   |                              ^^^^ expected `u32`, found `Option<_>`
-   |
-   = note: expected type `u32`
-              found enum `Option<_>`
+test result: FAILED. 29 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-error[E0308]: mismatched types
-  --> tests/bowling.rs:73:30
-   |
-73 |     assert_eq!(game.score(), Some(0));
-   |                              ^^^^^^^ expected `u32`, found `Option<{integer}>`
-   |
-   = note: expected type `u32`
-              found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-  --> tests/bowling.rs:86:30
-   |
-86 |     assert_eq!(game.score(), Some(90));
-   |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-   |
-   = note: expected type `u32`
-              found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:101:30
-    |
-101 |     assert_eq!(game.score(), Some(10));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:117:30
-    |
-117 |     assert_eq!(game.score(), Some(16));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:135:30
-    |
-135 |     assert_eq!(game.score(), Some(31));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:151:30
-    |
-151 |     assert_eq!(game.score(), Some(17));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:165:30
-    |
-165 |     assert_eq!(game.score(), Some(10));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:181:30
-    |
-181 |     assert_eq!(game.score(), Some(26));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:199:30
-    |
-199 |     assert_eq!(game.score(), Some(81));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:215:30
-    |
-215 |     assert_eq!(game.score(), Some(18));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:231:30
-    |
-231 |     assert_eq!(game.score(), Some(20));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:247:30
-    |
-247 |     assert_eq!(game.score(), Some(30));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:263:30
-    |
-263 |     assert_eq!(game.score(), Some(20));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:275:30
-    |
-275 |     assert_eq!(game.score(), Some(300));
-    |                              ^^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
-   --> tests/bowling.rs:283:26
-    |
-283 |     assert!(game.roll(5).is_ok());
-    |                          ^^^^^ method not found in `()`
-    |
-note: method `roll` modifies its receiver in-place
-   --> tests/bowling.rs:283:18
-    |
-283 |     assert!(game.roll(5).is_ok());
-    |                  ^^^^ this call modifies `game` in-place
-
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
-   --> tests/bowling.rs:312:26
-    |
-312 |     assert!(game.roll(5).is_ok());
-    |                          ^^^^^ method not found in `()`
-    |
-note: method `roll` modifies its receiver in-place
-   --> tests/bowling.rs:312:18
-    |
-312 |     assert!(game.roll(5).is_ok());
-    |                  ^^^^ this call modifies `game` in-place
-
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
-   --> tests/bowling.rs:327:27
-    |
-327 |     assert!(game.roll(10).is_ok());
-    |                           ^^^^^ method not found in `()`
-    |
-note: method `roll` modifies its receiver in-place
-   --> tests/bowling.rs:327:18
-    |
-327 |     assert!(game.roll(10).is_ok());
-    |                  ^^^^ this call modifies `game` in-place
-
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
-   --> tests/bowling.rs:328:26
-    |
-328 |     assert!(game.roll(6).is_ok());
-    |                          ^^^^^ method not found in `()`
-    |
-note: method `roll` modifies its receiver in-place
-   --> tests/bowling.rs:328:18
-    |
-328 |     assert!(game.roll(6).is_ok());
-    |                  ^^^^ this call modifies `game` in-place
-
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
-   --> tests/bowling.rs:342:26
-    |
-342 |     assert!(game.roll(6).is_ok());
-    |                          ^^^^^ method not found in `()`
-    |
-note: method `roll` modifies its receiver in-place
-   --> tests/bowling.rs:342:18
-    |
-342 |     assert!(game.roll(6).is_ok());
-    |                  ^^^^ this call modifies `game` in-place
-
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
-   --> tests/bowling.rs:358:27
-    |
-358 |     assert!(game.roll(10).is_ok());
-    |                           ^^^^^ method not found in `()`
-    |
-note: method `roll` modifies its receiver in-place
-   --> tests/bowling.rs:358:18
-    |
-358 |     assert!(game.roll(10).is_ok());
-    |                  ^^^^ this call modifies `game` in-place
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:373:30
-    |
-373 |     assert_eq!(game.score(), None);
-    |                              ^^^^ expected `u32`, found `Option<_>`
-    |
-    = note: expected type `u32`
-               found enum `Option<_>`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:377:30
-    |
-377 |     assert_eq!(game.score(), None);
-    |                              ^^^^ expected `u32`, found `Option<_>`
-    |
-    = note: expected type `u32`
-               found enum `Option<_>`
-
-error[E0599]: no method named `is_some` found for type `u32` in the current scope
-   --> tests/bowling.rs:381:26
-    |
-381 |     assert!(game.score().is_some());
-    |                          ^^^^^^^ method not found in `u32`
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:396:30
-    |
-396 |     assert_eq!(game.score(), None);
-    |                              ^^^^ expected `u32`, found `Option<_>`
-    |
-    = note: expected type `u32`
-               found enum `Option<_>`
-
-error[E0599]: no method named `is_some` found for type `u32` in the current scope
-   --> tests/bowling.rs:400:26
-    |
-400 |     assert!(game.score().is_some());
-    |                          ^^^^^^^ method not found in `u32`
-
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
-   --> tests/bowling.rs:414:26
-    |
-414 |     assert!(game.roll(2).is_ok());
-    |                          ^^^^^ method not found in `()`
-    |
-note: method `roll` modifies its receiver in-place
-   --> tests/bowling.rs:414:18
-    |
-414 |     assert!(game.roll(2).is_ok());
-    |                  ^^^^ this call modifies `game` in-place
-
-error[E0599]: no method named `is_ok` found for unit type `()` in the current scope
-   --> tests/bowling.rs:430:26
-    |
-430 |     assert!(game.roll(2).is_ok());
-    |                          ^^^^^ method not found in `()`
-    |
-note: method `roll` modifies its receiver in-place
-   --> tests/bowling.rs:430:18
-    |
-430 |     assert!(game.roll(2).is_ok());
-    |                  ^^^^ this call modifies `game` in-place
-
-error[E0308]: mismatched types
-   --> tests/bowling.rs:447:30
-    |
-447 |     assert_eq!(game.score(), Some(31));
-    |                              ^^^^^^^^ expected `u32`, found `Option<{integer}>`
-    |
-    = note: expected type `u32`
-               found enum `Option<{integer}>`
-
-Some errors have detailed explanations: E0308, E0433, E0599.
-For more information about an error, try `rustc --explain E0308`.
-error: could not compile `bowling` (test "bowling") due to 41 previous errors
+error: test failed, to rerun pass `--test bowling`

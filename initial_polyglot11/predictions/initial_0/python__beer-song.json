@@ -1,0 +1,8 @@
+{
+    "instance_id": "python__beer-song",
+    "model_name_or_path": "20250510_021328--claude-3-5-sonnet-20241022_0",
+    "model_patch": "diff --git a/beer_song.py b/beer_song.py\nindex 9a5e67f..fec5459 100644\n--- a/beer_song.py\n+++ b/beer_song.py\n@@ -1,2 +1,25 @@\n def recite(start, take=1):\n-    pass\n+    def verse(n):\n+        if n > 2:\n+            return (f\"{n} bottles of beer on the wall, {n} bottles of beer.\\n\"\n+                    f\"Take one down and pass it around, {n-1} bottles of beer on the wall.\")\n+        elif n == 2:\n+            return (\"2 bottles of beer on the wall, 2 bottles of beer.\\n\"\n+                    \"Take one down and pass it around, 1 bottle of beer on the wall.\")\n+        elif n == 1:\n+            return (\"1 bottle of beer on the wall, 1 bottle of beer.\\n\"\n+                    \"Take it down and pass it around, no more bottles of beer on the wall.\")\n+        else:  # n == 0\n+            return (\"No more bottles of beer on the wall, no more bottles of beer.\\n\"\n+                    \"Go to the store and buy some more, 99 bottles of beer on the wall.\")\n+\n+    verses = []\n+    current = start\n+    for _ in range(take):\n+        verses.append(verse(current))\n+        current = current - 1 if current > 0 else 99\n+    return \"\\n\\n\".join(verses)\n+\n+if __name__ == '__main__':\n+    # For quick testing, recite the first verse starting from 99\n+    print(recite(99, 1))\n",
+    "proposed_model_patches": [],
+    "eval_result": "unresolved",
+    "success": true
+}
