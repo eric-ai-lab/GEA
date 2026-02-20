@@ -1,7 +1,7 @@
 __pycache__/
 .vscode
 .DS_Store
-venv/
+# venv/  # 已注释，如需恢复忽略请取消注释
 
 logs/
 !initial/logs/
