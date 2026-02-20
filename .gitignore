@@ -57,6 +57,7 @@ nohup.out
 test*.py
 test_*.py
 !prompts/testrepo_prompt.py
+!polyglot/test_spec.py
 automate_medium_evaluation.py
 batch_*.py
 check_*.py
