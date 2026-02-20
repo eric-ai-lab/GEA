@@ -1,7 +1,7 @@
 __pycache__/
 .vscode
 .DS_Store
-# venv/  # 已注释，如需恢复忽略请取消注释
+venv/
 
 logs/
 !initial/logs/
@@ -56,6 +56,7 @@ nohup.out
 # Test and utility scripts
 test*.py
 test_*.py
+!prompts/testrepo_prompt.py
 automate_medium_evaluation.py
 batch_*.py
 check_*.py
