@@ -25,6 +25,9 @@ from swe_bench.utils import (
     setup_logger,
 )
 
+# GEA project root - use absolute paths to avoid cwd race in multi-threaded runs
+GEA_ROOT = Path(__file__).resolve().parent.parent
+
 def get_eval_script(commands):
     return "\n".join(["#!/bin/bash", "set -uxo pipefail"] + commands) + "\n"
 
@@ -63,16 +66,16 @@ def process_entry(entry, out_dname, model_name_or_path, model_patch_paths):
         container = build_container(test_spec, client, run_id, logger, nocache, force_rebuild=False)
         container.start()
 
-        # Copy the necessary files and requirements to the container
-        copy_to_container(container, 'coding_agent_polyglot.py', '/dgm/coding_agent.py')
-        copy_to_container(container, 'requirements.txt', '/dgm/requirements.txt')
-        copy_to_container(container, 'pytest.ini', '/dgm/pytest.ini')
-        copy_to_container(container, 'tools/', '/dgm/tools/')
-        copy_to_container(container, 'utils/', '/dgm/utils/')
-        copy_to_container(container, 'tests/', '/dgm/tests/')
-        copy_to_container(container, 'prompts/', '/dgm/prompts/')
-        copy_to_container(container, 'llm.py', '/dgm/llm.py')
-        copy_to_container(container, 'llm_withtools.py', '/dgm/llm_withtools.py')
+        # Use GEA_ROOT absolute paths to avoid cwd race when max_workers > 1
+        copy_to_container(container, GEA_ROOT / 'coding_agent_polyglot.py', '/dgm/coding_agent.py')
+        copy_to_container(container, GEA_ROOT / 'requirements.txt', '/dgm/requirements.txt')
+        copy_to_container(container, GEA_ROOT / 'pytest.ini', '/dgm/pytest.ini')
+        copy_to_container(container, GEA_ROOT / 'tools/', '/dgm/tools/')
+        copy_to_container(container, GEA_ROOT / 'utils/', '/dgm/utils/')
+        copy_to_container(container, GEA_ROOT / 'tests/', '/dgm/tests/')
+        copy_to_container(container, GEA_ROOT / 'prompts/', '/dgm/prompts/')
+        copy_to_container(container, GEA_ROOT / 'llm.py', '/dgm/llm.py')
+        copy_to_container(container, GEA_ROOT / 'llm_withtools.py', '/dgm/llm_withtools.py')
         chat_history_file_container = f'/dgm/{chat_history_file.name}'
 
         # See the checked repo
@@ -293,6 +296,8 @@ def harness(
         model_name_or_path = f"{timestamp}--claude-3-5-haiku-20241022"  # ✅ Haiku 3.5 - 快速且高性价比
     pred_dname = Path(pred_dname)
     pred_dname.mkdir(exist_ok=True)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     out_dnames = []
     
     # Prepare the dataset entries

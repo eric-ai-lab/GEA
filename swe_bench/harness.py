@@ -21,6 +21,9 @@ from swe_bench.utils import (
 )
 from utils.common_utils import load_json_file
 
+# GEA project root (parent of swe_bench/) - used for absolute paths to avoid os.chdir() in multi-threaded context
+GEA_ROOT = Path(__file__).resolve().parent.parent
+
 def process_entry(entry, out_dname, model_name_or_path, model_patch_paths):
     """
     Process a single dataset entry. This function encapsulates the main processing logic
@@ -53,33 +56,20 @@ def process_entry(entry, out_dname, model_name_or_path, model_patch_paths):
         container = build_container(test_spec, client, run_id, logger, nocache, force_rebuild=False)
         container.start()
 
-        # Check that we are in dgm directory
-        tmp_currdir = os.path.abspath(os.getcwd())
-        logger.info(f"Current directory: {tmp_currdir}")
-        # If not in dgm directory, try to change to it
-        if not tmp_currdir.endswith('/dgm'):
-            try:
-                os.chdir('dgm')
-                tmp_currdir = os.path.abspath(os.getcwd())
-                logger.info(f"Changed directory to: {tmp_currdir}")
-            except Exception as e:
-                pass
-        # If still not in dgm directory, go up until we find it
-        while not tmp_currdir.endswith('/dgm'):
-            os.chdir('..')
-            tmp_currdir = os.path.abspath(os.getcwd())
-            logger.info(f"Changed directory to: {tmp_currdir}")
+        # Use GEA_ROOT absolute paths to avoid os.chdir() - which is process-wide and causes
+        # race conditions when max_workers > 1 (threads compete over cwd, can hit root and loop forever)
+        logger.info(f"Using GEA project root: {GEA_ROOT}")
 
         # Copy the necessary files and requirements to the container
-        copy_to_container(container, 'coding_agent.py', '/dgm/coding_agent.py')
-        copy_to_container(container, 'requirements.txt', '/dgm/requirements.txt')
-        copy_to_container(container, 'pytest.ini', '/dgm/pytest.ini')
-        copy_to_container(container, 'tools/', '/dgm/tools/')
-        copy_to_container(container, 'utils/', '/dgm/utils/')
-        copy_to_container(container, 'tests/', '/dgm/tests/')
-        copy_to_container(container, 'prompts/', '/dgm/prompts/')
-        copy_to_container(container, 'llm.py', '/dgm/llm.py')
-        copy_to_container(container, 'llm_withtools.py', '/dgm/llm_withtools.py')
+        copy_to_container(container, GEA_ROOT / 'coding_agent.py', '/dgm/coding_agent.py')
+        copy_to_container(container, GEA_ROOT / 'requirements.txt', '/dgm/requirements.txt')
+        copy_to_container(container, GEA_ROOT / 'pytest.ini', '/dgm/pytest.ini')
+        copy_to_container(container, GEA_ROOT / 'tools/', '/dgm/tools/')
+        copy_to_container(container, GEA_ROOT / 'utils/', '/dgm/utils/')
+        copy_to_container(container, GEA_ROOT / 'tests/', '/dgm/tests/')
+        copy_to_container(container, GEA_ROOT / 'prompts/', '/dgm/prompts/')
+        copy_to_container(container, GEA_ROOT / 'llm.py', '/dgm/llm.py')
+        copy_to_container(container, GEA_ROOT / 'llm_withtools.py', '/dgm/llm_withtools.py')
         chat_history_file_container = f'/dgm/{chat_history_file.name}'
 
         # Install issue requirements
