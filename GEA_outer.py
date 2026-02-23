@@ -53,7 +53,7 @@ def any_exceeding_context_length(output_dir, commit_id, instance_ids):
     return False
 
 
-def select_parents_by_performance_novelty(candidates, output_dir, K, M=4, epsilon=1e-8):
+def select_parents_by_performance_novelty(candidates, output_dir, K, M=4, epsilon=1e-8, polyglot=False):
     """
     Select top-K parent agents by combined performance--novelty score.
 
@@ -64,7 +64,8 @@ def select_parents_by_performance_novelty(candidates, output_dir, K, M=4, epsilo
     Returns the top-K agents by score(i).
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    task_list_path = os.path.join(script_dir, 'swe_bench', 'subsets', 'task.json')
+    subset_dir = 'polyglot' if polyglot else 'swe_bench'
+    task_list_path = os.path.join(script_dir, subset_dir, 'subsets', 'task.json')
     commits = list(candidates.keys())
     if not os.path.exists(task_list_path):
         return commits[-K:] if len(commits) >= K else commits
@@ -182,7 +183,7 @@ def choose_selfimproves(output_dir, archive, selfimprove_size, method='random', 
         parent_commits = commits[-1:]
     elif method == 'performance_novelty':
         # Rank by performance--novelty score; select top selfimprove_size
-        parent_commits = select_parents_by_performance_novelty(candidates, output_dir, selfimprove_size)
+        parent_commits = select_parents_by_performance_novelty(candidates, output_dir, selfimprove_size, polyglot=polyglot)
         if len(parent_commits) < selfimprove_size:
             parent_commits.extend(random.choices(parent_commits, k=selfimprove_size - len(parent_commits)))
     elif method == 'score_prop':
@@ -315,7 +316,7 @@ def choose_group_improves(output_dir, archive, groupimprove_size, method='random
         parent_commits = commits[-1:]
     elif method == 'performance_novelty':
         # Rank by performance--novelty score; select top groupimprove_size
-        parent_commits = select_parents_by_performance_novelty(candidates, output_dir, groupimprove_size)
+        parent_commits = select_parents_by_performance_novelty(candidates, output_dir, groupimprove_size, polyglot=polyglot)
         if len(parent_commits) < groupimprove_size:
             parent_commits.extend(random.choices(parent_commits, k=groupimprove_size - len(parent_commits)))
     elif method == 'score_prop':
@@ -651,7 +652,7 @@ def main():
     parser.add_argument("--num_swe_evals", type=int, default=1, help="Number of repeated SWE evaluations to run for each self-improve attempt.")
     parser.add_argument('--post_improve_diagnose', default=False, action='store_true', help='Diagnose the self-improvement after evaluation')
     parser.add_argument("--shallow_eval", default=False, action='store_true', help="Run single shallow evaluation for self-improvement on swe.")
-    parser.add_argument("--polyglot", default=False, action='store_true', help="Run single shallow evaluation for self-improvement on swe.")
+    parser.add_argument("--polyglot", default=False, action='store_true', help="Run evolution and evaluation on polyglot benchmark; task-success vector uses polyglot/subsets/task.json.")
     parser.add_argument("--eval_noise", type=float, default=0.1, help="Noise leeway for evaluation.")
     parser.add_argument("--no_full_eval", default=False, action='store_true', help="Do not run full evaluation on swe if a node is the top N highest performing.")
     # baselines
@@ -660,15 +661,15 @@ def main():
         "--coding_agent",
         type=str,
         default=None,
-        choices=['claude_haiku_4.5', 'claude_sonnet_4.5'],
-        help="Coding agent model (same for self-improvement and evaluation). Use 'claude_haiku_4.5' or 'claude_sonnet_4.5'. Default is Opus 4.5."
+        choices=['claude_haiku_4.5', 'claude_sonnet_4.5', 'claude_sonnet_3.5'],
+        help="Coding agent model (same for self-improvement and evaluation). Use 'claude_haiku_4.5', 'claude_sonnet_4.5', or 'claude_sonnet_3.5'. Default is Opus 4.5."
     )
     parser.add_argument(
         "--diagnose_model",
         type=str,
         default=None,
-        choices=['claude_haiku_4.5', 'claude_sonnet_4.5'],
-        help="Model to use for diagnose (problem diagnosis and improvement diagnosis). Default is 'o1-2024-12-17' (OpenAI). Use 'claude_haiku_4.5' or 'claude_sonnet_4.5' to use Claude models instead."
+        choices=['claude_haiku_4.5', 'claude_sonnet_4.5', 'claude_sonnet_3.5'],
+        help="Model to use for diagnose (problem diagnosis and improvement diagnosis). Default is 'o1-2024-12-17' (OpenAI). Use 'claude_haiku_4.5', 'claude_sonnet_4.5', or 'claude_sonnet_3.5' to use Claude models instead."
     )
     args = parser.parse_args()
     

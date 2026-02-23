@@ -94,3 +94,6 @@ requirements_dev.txt
 run_dgm.sh
 self_improve_step_backup.py
 setup_permanent_api_keys.sh
+
+# Deprecated: replaced by GEA_outer.py
+DGM_outer.py

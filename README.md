@@ -62,9 +62,9 @@ cd ../../
 python -m polyglot.prepare_polyglot_dataset
 ```
 
-## Running the DGM
+## Running the GEA
 ```bash
-python DGM_outer.py
+python GEA_outer.py
 ```
 By default, outputs will be saved in the `output_dgm/` directory.
 
@@ -78,7 +78,7 @@ By default, outputs will be saved in the `output_dgm/` directory.
 - `tests/` tests for the DGM system
 - `tools/` tools available to the foundation models
 - `coding_agent.py` main implementation of the initial coding agent
-- `DGM_outer.py` entry point for running the DGM algorithm
+- `GEA_outer.py` entry point for running the GEA algorithm
 
 ## Logs from Experiments
 This [google drive folder](https://drive.google.com/drive/folders/1Kcu9TbIa9Z50pJ7S6hH9omzzD1pxIYZC?usp=sharing) contains all the foundation model output logs from the experiments shown in the paper.
