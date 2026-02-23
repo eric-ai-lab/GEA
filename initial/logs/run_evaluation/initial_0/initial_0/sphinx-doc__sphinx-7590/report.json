@@ -12,7 +12,8 @@
                 ]
             },
             "PASS_TO_PASS": {
-                "success": [
+                "success": [],
+                "failure": [
                     "tests/test_domain_cpp.py::test_fundamental_types",
                     "tests/test_domain_cpp.py::test_type_definitions",
                     "tests/test_domain_cpp.py::test_concept_definitions",
@@ -37,8 +38,7 @@
                     "tests/test_domain_cpp.py::test_build_domain_cpp_with_add_function_parentheses_is_True",
                     "tests/test_domain_cpp.py::test_build_domain_cpp_with_add_function_parentheses_is_False",
                     "tests/test_domain_cpp.py::test_xref_consistency"
-                ],
-                "failure": []
+                ]
             },
             "FAIL_TO_FAIL": {
                 "success": [],

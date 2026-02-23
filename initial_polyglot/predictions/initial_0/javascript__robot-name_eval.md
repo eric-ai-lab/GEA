@@ -14,32 +14,57 @@ FAIL ./robot-name.spec.js
     ✓ has a name (3 ms)
     ✓ name is the same each time (1 ms)
     ✓ different robots have different names (1 ms)
-    ✓ is able to reset the name (1 ms)
-    ✕ should set a unique name after reset (43 ms)
+    ✕ is able to reset the name (1 ms)
+    ✕ should set a unique name after reset
     ✓ internal name cannot be modified (2 ms)
     ✓ new names should not be sequential (1 ms)
-    ✓ names from reset should not be sequential (1 ms)
+    ✕ names from reset should not be sequential (1 ms)
     ○ skipped all the names can be generated
+
+  ● Robot › is able to reset the name
+
+    TypeError: robot.reset is not a function
+
+      50 |     const originalName = robot.name;
+      51 |
+    > 52 |     robot.reset();
+         |           ^
+      53 |     const newName = robot.name;
+      54 |
+      55 |     expect(newName).toMatch(/^[A-Z]{2}\d{3}$/);
+
+      at Object.reset (robot-name.spec.js:52:11)
 
   ● Robot › should set a unique name after reset
 
-    expect(received).toEqual(expected) // deep equality
+    TypeError: robot.reset is not a function
 
-    Expected: 10001
-    Received: 9925
-
+      63 |     usedNames.add(robot.name);
+      64 |     for (let i = 0; i < NUMBER_OF_ROBOTS; i += 1) {
+    > 65 |       robot.reset();
+         |             ^
+      66 |       usedNames.add(robot.name);
       67 |     }
       68 |
-    > 69 |     expect(usedNames.size).toEqual(NUMBER_OF_ROBOTS + 1);
-         |                            ^
-      70 |   });
-      71 |
-      72 |   test('internal name cannot be modified', () => {
 
-      at Object.toEqual (robot-name.spec.js:69:28)
+      at Object.reset (robot-name.spec.js:65:13)
+
+  ● Robot › names from reset should not be sequential
+
+    TypeError: robot.reset is not a function
+
+      88 |   test('names from reset should not be sequential', () => {
+      89 |     const name1 = robot.name;
+    > 90 |     robot.reset();
+         |           ^
+      91 |     const name2 = robot.name;
+      92 |     robot.reset();
+      93 |     const name3 = robot.name;
+
+      at Object.reset (robot-name.spec.js:90:11)
 
 Test Suites: 1 failed, 1 total
-Tests:       1 failed, 1 skipped, 7 passed, 9 total
+Tests:       3 failed, 1 skipped, 5 passed, 9 total
 Snapshots:   0 total
-Time:        0.825 s
+Time:        0.667 s
 Ran all test suites matching ./LICENSE|./babel.config.js|./eval.sh|./node_modules|./package-lock.json|./package.json|./robot-name.js|./robot-name.spec.js.

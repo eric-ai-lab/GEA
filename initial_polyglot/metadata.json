@@ -1,23 +1,23 @@
 {
     "run_id": "initial",
     "overall_performance": {
-        "accuracy_score": 0.2,
-        "total_resolved_instances": 2,
+        "accuracy_score": 0.3,
+        "total_resolved_instances": 3,
         "total_submitted_instances": 10,
         "files": [],
         "total_unresolved_ids": [
+            "cpp__all-your-base",
+            "go__book-store",
             "java__sgf-parsing",
             "javascript__bottle-song",
             "javascript__robot-name",
-            "cpp__all-your-base",
             "python__beer-song",
-            "go__dominoes",
-            "python__dominoes",
             "rust__bowling"
         ],
         "total_emptypatch_ids": [],
         "total_resolved_ids": [
-            "go__book-store",
+            "go__dominoes",
+            "python__dominoes",
             "rust__variable-length-quantity"
         ]
     }

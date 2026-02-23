@@ -188,16 +188,23 @@ index 86257bc4b9..411ca4805c 100644
     3.0
 + git diff 69331bb851c34f05bc77e9fc24020fe6908b9cd5
 diff --git a/django/template/library.py b/django/template/library.py
-index 20bc86dac8..b6ef802fee 100644
+index 20bc86dac8..29fb42335b 100644
 --- a/django/template/library.py
 +++ b/django/template/library.py
-@@ -255,13 +255,16 @@ def parse_bits(parser, bits, params, varargs, varkw, defaults,
+@@ -255,32 +255,45 @@ def parse_bits(parser, bits, params, varargs, varkw, defaults,
          kwarg for kwarg in kwonly
          if not kwonly_defaults or kwarg not in kwonly_defaults
      ]
 +
-+    valid_param_set = set(params + list(kwonly))
-+    
++    # Create a set of all valid keyword arguments
++    valid_kwargs = set(params)
++    if kwonly:  # Always add all keyword-only arguments, regardless of defaults
++        valid_kwargs.update(kwonly)
++    if varkw is not None:
++        valid_kwargs = None  # Allow any kwargs when varkw is present
++
++    seen_bits = {}  # Track bits by parameter name
++
      for bit in bits:
          # First we try to extract a potential kwarg from the bit
          kwarg = token_kwargs([bit], parser)
@@ -205,15 +212,54 @@ index 20bc86dac8..b6ef802fee 100644
              # The kwarg was successfully extracted
              param, value = kwarg.popitem()
 -            if param not in params and param not in unhandled_kwargs and varkw is None:
-+            if param not in valid_param_set and varkw is None:
-                 # An unexpected keyword argument was supplied
+-                # An unexpected keyword argument was supplied
++
++            if param in seen_bits:
++                # The keyword argument has already been supplied
                  raise TemplateSyntaxError(
-                     "'%s' received unexpected keyword argument '%s'" %
-@@ -325,4 +328,4 @@ def import_library(name):
+-                    "'%s' received unexpected keyword argument '%s'" %
++                    "'%s' received multiple values for keyword argument '%s'" %
+                     (name, param))
+-            elif param in kwargs:
+-                # The keyword argument has already been supplied once
++
++            seen_bits[param] = value
++
++            if valid_kwargs is not None and param not in valid_kwargs:
++                # An unexpected keyword argument was supplied
+                 raise TemplateSyntaxError(
+-                    "'%s' received multiple values for keyword argument '%s'" %
++                    "'%s' received unexpected keyword argument '%s'" %
+                     (name, param))
+-            else:
+-                # All good, record the keyword argument
+-                kwargs[str(param)] = value
+-                if param in unhandled_params:
+-                    # If using the keyword syntax for a positional arg, then
+-                    # consume it.
+-                    unhandled_params.remove(param)
+-                elif param in unhandled_kwargs:
+-                    # Same for keyword-only arguments
+-                    unhandled_kwargs.remove(param)
++
++            kwargs[str(param)] = value
++            if param in unhandled_params:
++                # If using the keyword syntax for a positional arg, then
++                # consume it.
++                unhandled_params.remove(param)
++            elif param in unhandled_kwargs:
++                # Same for keyword-only arguments
++                unhandled_kwargs.remove(param)
+         else:
+             if kwargs:
+                 raise TemplateSyntaxError(
+@@ -324,5 +337,5 @@ def import_library(name):
+         return module.register
      except AttributeError:
          raise InvalidTemplateLibrary(
-             "Module  %s does not have a variable named 'register'" % name,
+-            "Module  %s does not have a variable named 'register'" % name,
 -        )
++            "Module %s does not have a variable named 'register'" % name,
 +        )
 \ No newline at end of file
 + source /opt/miniconda3/bin/activate
@@ -343,7 +389,7 @@ export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
 + python -m pip install -e .
 Obtaining file:///testbed
 Requirement already satisfied: asgiref>=3.2 in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (3.4.1)
-Requirement already satisfied: pytz in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (2024.2)
+Requirement already satisfied: pytz in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (2025.2)
 Requirement already satisfied: sqlparse>=0.2.2 in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (0.4.4)
 Requirement already satisfied: typing-extensions in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from asgiref>=3.2->Django==3.1) (4.1.1)
 Installing collected packages: Django
@@ -352,8 +398,8 @@ Installing collected packages: Django
     Uninstalling Django-3.1:
       Successfully uninstalled Django-3.1
   Running setup.py develop for Django
-Successfully installed Django-3.1
 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+Successfully installed Django-3.1
 + git checkout 69331bb851c34f05bc77e9fc24020fe6908b9cd5 tests/template_tests/templatetags/inclusion.py tests/template_tests/test_custom.py
 Updated 0 paths from 88307fafa4
 + git apply -v -

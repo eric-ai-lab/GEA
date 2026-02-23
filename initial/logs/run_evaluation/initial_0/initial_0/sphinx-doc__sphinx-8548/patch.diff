@@ -33,142 +33,581 @@ index 8d40de1a8..03f325278 100644
  ]
  
  extras_require = {
-diff --git a/sphinx/ext/autodoc/importer.py b/sphinx/ext/autodoc/importer.py
-index d6e73d36a..6af221418 100644
---- a/sphinx/ext/autodoc/importer.py
-+++ b/sphinx/ext/autodoc/importer.py
-@@ -17,7 +17,7 @@ from sphinx.deprecation import RemovedInSphinx40Warning, deprecated_alias
- from sphinx.pycode import ModuleAnalyzer
- from sphinx.util import logging
- from sphinx.util.inspect import (getannotations, getmro, getslots, isclass, isenumclass,
--                                 safe_getattr)
-+                                safe_getattr)
- 
- if False:
-     # For type annotation
-@@ -257,83 +257,62 @@ def get_class_members(subject: Any, objpath: List[str], attrgetter: Callable,
-     from sphinx.ext.autodoc import INSTANCEATTR
- 
-     # the members directly defined in the class
--    obj_dict = attrgetter(subject, '__dict__', {})
--
-     members = {}  # type: Dict[str, ClassAttribute]
- 
--    # enum members
--    if isenumclass(subject):
--        for name, value in subject.__members__.items():
--            if name not in members:
--                members[name] = ClassAttribute(subject, name, value)
-+    # traverse MRO to get all attributes, including inherited ones
-+    for cls in getmro(subject):
-+        obj_dict = attrgetter(cls, '__dict__', {})
- 
--        superclass = subject.__mro__[1]
--        for name in obj_dict:
--            if name not in superclass.__dict__:
--                value = safe_getattr(subject, name)
--                members[name] = ClassAttribute(subject, name, value)
-+        # enum members
-+        if isenumclass(cls):
-+            for name, value in cls.__members__.items():
-+                if name not in members:
-+                    members[name] = ClassAttribute(cls, name, value)
- 
--    # members in __slots__
--    try:
--        __slots__ = getslots(subject)
--        if __slots__:
--            from sphinx.ext.autodoc import SLOTSATTR
-+            superclass = cls.__mro__[1]
-+            for name in obj_dict:
-+                if name not in superclass.__dict__:
-+                    value = safe_getattr(cls, name)
-+                    members[name] = ClassAttribute(cls, name, value)
- 
--            for name, docstring in __slots__.items():
--                members[name] = ClassAttribute(subject, name, SLOTSATTR, docstring)
--    except (AttributeError, TypeError, ValueError):
--        pass
--
--    # other members
--    for name in dir(subject):
-+        # members in __slots__
-         try:
--            value = attrgetter(subject, name)
--            unmangled = unmangle(subject, name)
--            if unmangled and unmangled not in members:
--                if name in obj_dict:
--                    members[unmangled] = ClassAttribute(subject, unmangled, value)
--                else:
--                    members[unmangled] = ClassAttribute(None, unmangled, value)
--        except AttributeError:
--            continue
-+            __slots__ = getslots(cls)
-+            if __slots__:
-+                from sphinx.ext.autodoc import SLOTSATTR
+diff --git a/sphinx/ext/autodoc/docstring_inheritance.py b/sphinx/ext/autodoc/docstring_inheritance.py
+new file mode 100644
+index 000000000..e9ee8e146
+--- /dev/null
++++ b/sphinx/ext/autodoc/docstring_inheritance.py
+@@ -0,0 +1,41 @@
++"""
++Functions for handling docstring inheritance for attributes.
++"""
 +
-+                for name, docstring in __slots__.items():
-+                    members[name] = ClassAttribute(cls, name, SLOTSATTR, docstring)
-+        except (AttributeError, TypeError, ValueError):
++from sphinx.ext.autodoc.importer import get_class_members, get_module_members
++from sphinx.pycode import ModuleAnalyzer, PycodeError
++from sphinx.util.inspect import safe_getattr
++
++
++def get_attr_doc(parent_cls, attrname):
++    """Get the docstring for an attribute by checking parent classes recursively.
++
++    Parameters
++    ----------
++    parent_cls : class
++        The class to start searching from
++    attrname : str
++        Name of the attribute to find docstring for
++
++    Returns
++    -------
++    str | None
++        The found docstring or None if not found
++    """
++    try:
++        # First check this class
++        analyzer = ModuleAnalyzer.for_module(parent_cls.__module__)
++        analyzer.analyze()
++        key = (parent_cls.__module__, attrname)
++        if key in analyzer.attr_docs:
++            return analyzer.attr_docs[key]
++    except (PycodeError, AttributeError):
++        pass
++
++    # Then check parent classes recursively
++    for base in parent_cls.__bases__:
++        doc = get_attr_doc(base, attrname)
++        if doc is not None:
++            return doc
++
++    return None
+\ No newline at end of file
+diff --git a/sphinx/ext/autodoc/documenters/attribute.py b/sphinx/ext/autodoc/documenters/attribute.py
+new file mode 100644
+index 000000000..14eb8a00d
+--- /dev/null
++++ b/sphinx/ext/autodoc/documenters/attribute.py
+@@ -0,0 +1,80 @@
++"""Attribute documenter with inheritance support."""
++
++from typing import Any, List, Optional, Tuple, Type, Union
++
++from docutils.statemachine import StringList
++
++from .. import ModuleDocumenter
++from sphinx.pycode import ModuleAnalyzer, PycodeError
++from sphinx.util.docstrings import prepare_docstring
++from sphinx.util.typing import get_type_hints
++
++
++def get_inherited_docstring(cls: Type, attrname: str) -> Optional[str]:
++    """Get docstring for an attribute from a class or its parents.
++    
++    Args:
++        cls: The class to start searching from
++        attrname: Name of the attribute to find docstring for
++        
++    Returns:
++        Found docstring or None
++    """
++    def get_analyzer_docstring(module, name):
++        try:
++            analyzer = ModuleAnalyzer.for_module(module)
++            analyzer.analyze()
++            key = (module, name)
++            if key in analyzer.attr_docs:
++                return analyzer.attr_docs[key]
++        except PycodeError:
++            pass
++        return None
++
++    # First check in current class
++    docstring = get_analyzer_docstring(cls.__module__, attrname)
++    if docstring:
++        return docstring
++        
++    # Then check parent classes
++    for base in getattr(cls, '__bases__', []):
++        docstring = get_inherited_docstring(base, attrname)
++        if docstring:
++            return docstring
++            
++    return None
++
++
++class AttributeDocumenterWithInheritance(ModuleDocumenter):
++    """Document attributes and support inheritance."""
++    
++    objtype = 'attribute' 
++    directivetype = 'attribute'
++    member_order = 60
++    
++    @classmethod
++    def can_document_member(cls, member: Any, membername: str, isattr: bool, parent: Any) -> bool:
++        """Check if we can document this member."""
++        return isinstance(parent, type)
++        
++    def add_content(self, more_content: Optional[StringList], no_docstring: bool = False) -> None:
++        """Add docstring from docstrings, attribute documentation and user."""
++        
++        # Try getting standard docstring first
++        docstring = None if no_docstring else self.get_doc()
++        
++        # If no docstring found and inheritance enabled, check parent classes
++        if not docstring and self.options.get('inherited-members'):
++            docstring = get_inherited_docstring(self.parent, self.objpath[-1])
++            if docstring:
++                docstring = prepare_docstring(docstring)
++                
++        if docstring:
++            sourcename = self.get_sourcename()
++            for i, line in enumerate(docstring):
++                self.add_line(line, sourcename, indent='   ')
++            if not line:
++                self.add_line('', sourcename, indent='   ')
++                
++        # Add any additional content
++        super().add_content(more_content)
+\ No newline at end of file
+diff --git a/sphinx/ext/autodoc/get_attribute_doc.py b/sphinx/ext/autodoc/get_attribute_doc.py
+new file mode 100644
+index 000000000..fd3d3180f
+--- /dev/null
++++ b/sphinx/ext/autodoc/get_attribute_doc.py
+@@ -0,0 +1,40 @@
++"""Helper module to get docstrings for attributes including from parent classes."""
++
++from sphinx.pycode import ModuleAnalyzer, PycodeError
++from sphinx.util.docstrings import prepare_docstring 
++from sphinx.util.inspect import safe_getattr
++
++
++def get_attribute_docstring(parent_cls, attrname):
++    """Get the docstring for a class attribute by checking parent classes if needed.
++    
++    Args:
++        parent_cls: The class to check
++        attrname: Name of the attribute to get docstring for
++        
++    Returns:
++        Tuple[str|None, Any]: (Docstring if found else None, attribute value)
++    """
++    value = safe_getattr(parent_cls, attrname, None)
++    docstring = None
++
++    # Get docstring from current class
++    for cls in [parent_cls]:
++        try:
++            analyzer = ModuleAnalyzer.for_module(cls.__module__)
++            analyzer.analyze()
++            if (cls.__module__, attrname) in analyzer.attr_docs:
++                docstring = analyzer.attr_docs[cls.__module__, attrname]
++                break
++        except PycodeError:
 +            pass
 +
-+        # other members
-+        for name in dir(cls):
-+            if name not in members:  # don't override members from derived class
-+                try:
-+                    value = attrgetter(cls, name)
-+                    docstring = getattr(value, '__doc__', None)
-+                    name = unmangle(cls, name)
-+                    if name:
-+                        members[name] = ClassAttribute(cls, name, value, docstring)
-+                except AttributeError:
-+                    continue
- 
-     # annotation only member (ex. attr: int)
--    for cls in getmro(subject):
-+    for c in getmro(subject):
-         try:
--            for name in getannotations(cls):
--                name = unmangle(cls, name)
-+            for name in getannotations(c):
-+                name = unmangle(c, name)
-                 if name and name not in members:
--                    members[name] = ClassAttribute(cls, name, INSTANCEATTR)
-+                    members[name] = ClassAttribute(c, name, INSTANCEATTR)
-         except AttributeError:
-             pass
- 
-     if analyzer:
-         # append instance attributes (cf. self.attr1) if analyzer knows
-         namespace = '.'.join(objpath)
--        for (ns, name), docstring in analyzer.attr_docs.items():
-+        for (ns, name) in analyzer.find_attr_docs():
-             if namespace == ns and name not in members:
--                members[name] = ClassAttribute(subject, name, INSTANCEATTR,
--                                               '\n'.join(docstring))
--
--    return members
--
-+                members[name] = ClassAttribute(subject, name, INSTANCEATTR)
- 
--from sphinx.ext.autodoc.mock import (MockFinder, MockLoader, _MockModule, _MockObject,  # NOQA
--                                     mock)
--
--deprecated_alias('sphinx.ext.autodoc.importer',
--                 {
--                     '_MockModule': _MockModule,
--                     '_MockObject': _MockObject,
--                     'MockFinder': MockFinder,
--                     'MockLoader': MockLoader,
--                     'mock': mock,
--                 },
--                 RemovedInSphinx40Warning,
--                 {
--                     '_MockModule': 'sphinx.ext.autodoc.mock._MockModule',
--                     '_MockObject': 'sphinx.ext.autodoc.mock._MockObject',
--                     'MockFinder': 'sphinx.ext.autodoc.mock.MockFinder',
--                     'MockLoader': 'sphinx.ext.autodoc.mock.MockLoader',
--                     'mock': 'sphinx.ext.autodoc.mock.mock',
--                 })
-+    return members
++    # If not found, check parent classes
++    if docstring is None and hasattr(parent_cls, '__bases__'):
++        for base in parent_cls.__bases__:
++            base_docstring, _ = get_attribute_docstring(base, attrname)
++            if base_docstring is not None:
++                docstring = base_docstring
++                break
++
++    return docstring, value
+\ No newline at end of file
+diff --git a/sphinx/ext/autodoc/inheritance.py b/sphinx/ext/autodoc/inheritance.py
+new file mode 100644
+index 000000000..c6e28780a
+--- /dev/null
++++ b/sphinx/ext/autodoc/inheritance.py
+@@ -0,0 +1,46 @@
++"""Docstring inheritance extension for autodoc."""
++
++from sphinx.pycode import ModuleAnalyzer, PycodeError
++from sphinx.util.inspect import safe_getattr
++
++
++def monkey_patch_attribute_documenter():
++    """Install docstring inheritance support by monkey patching."""
++    from sphinx.ext.autodoc import AttributeDocumenter
++
++    original_get_doc = AttributeDocumenter.get_doc
++
++    def get_docstring_with_inheritance(cls, attrname):
++        """Get docstring for an attribute, looking up parent classes if needed."""
++        try:
++            # First check in current class
++            analyzer = ModuleAnalyzer.for_module(cls.__module__)
++            analyzer.analyze()
++            key = (cls.__module__, attrname)
++            if key in analyzer.attr_docs:
++                return analyzer.attr_docs[key]
++        except PycodeError:
++            pass
++
++        # Check parent classes
++        for base in cls.__bases__:
++            docstring = get_docstring_with_inheritance(base, attrname)
++            if docstring is not None:
++                return docstring
++                
++        return None
++
++    def enhanced_get_doc(self, encoding=None, ignore=1):
++        """Enhanced get_doc that handles docstring inheritance."""
++        docstring = original_get_doc(self, encoding, ignore)
++        
++        # If no docstring found and inheritance enabled, try parent classes
++        if not docstring and self.options.get('inherited-members'):
++            parent_docstring = get_docstring_with_inheritance(self.parent, self.objpath[-1])
++            if parent_docstring:
++                docstring = [parent_docstring.splitlines()]
++
++        return docstring
++
++    # Install monkey patch
++    AttributeDocumenter.get_doc = enhanced_get_doc
+\ No newline at end of file
+diff --git a/sphinx/ext/autodoc_inheritance.py b/sphinx/ext/autodoc_inheritance.py
+new file mode 100644
+index 000000000..0f8b8d31d
+--- /dev/null
++++ b/sphinx/ext/autodoc_inheritance.py
+@@ -0,0 +1,35 @@
++"""Sphinx autodoc extension for better handling of docstring inheritance."""
++
++from sphinx.pycode import ModuleAnalyzer, PycodeError
++from sphinx.util.inspect import safe_getattr
++from sphinx.ext.autodoc import AutodocProcessor, AttributeDocumenter, ClassDocumenter
++
++class AttributeInheritanceDocumenter(AttributeDocumenter):
++    """Extension of AttributeDocumenter to handle inherited attribute docstrings."""
++    
++    def get_doc(self, encoding=None, ignore=1):
++        """Get the docstring and metadata for the attribute.
++        
++        This version also looks up the inheritance tree for docstrings.
++        """
++        # First try to get docstring from this class
++        docstring = super().get_doc(encoding, ignore)
++        if docstring is None:
++            # Try parent classes
++            for base in self.parent.__bases__:
++                analyzer = ModuleAnalyzer.for_module(base.__module__)
++                analyzer.analyze()
++                key = (base.__module__, self.object_name)
++                if key in analyzer.attr_docs:
++                    docstring = [analyzer.attr_docs[key].splitlines()]
++                    break
++        return docstring
++
++def setup(app):
++    """Register the docstring inheritance extension."""
++    app.add_autodocumenter(AttributeInheritanceDocumenter, override=True)
++    return {
++        'version': '0.1',
++        'parallel_read_safe': True,
++        'parallel_write_safe': True,
++    }
+\ No newline at end of file
+diff --git a/sphinx/ext/autodoc_inheritance/__init__.py b/sphinx/ext/autodoc_inheritance/__init__.py
+new file mode 100644
+index 000000000..81d854501
+--- /dev/null
++++ b/sphinx/ext/autodoc_inheritance/__init__.py
+@@ -0,0 +1,72 @@
++"""Autodoc extension for enhanced docstring inheritance."""
++
++import inspect
++
++from sphinx.pycode import ModuleAnalyzer, PycodeError
++from sphinx.util.inspect import safe_getattr, getdoc
++
++
++class AttributeDocumenterWithInheritance:
++    """Mixin class for enhancing attribute documenter with docstring inheritance."""
++    
++    def get_doc(self, encoding=None, ignore=1):
++        """Get attribute docstring, with inheritance support."""
++        docstring = super().get_doc(encoding, ignore)
++        
++        # If no docstring found and inheritance enabled, check parent classes
++        if not docstring and self.options.get('inherited-members'):
++            parent_docstring = self._get_inherited_docstring()
++            if parent_docstring:
++                docstring = [parent_docstring.splitlines()]
++                
++        return docstring
++    
++    def _get_inherited_docstring(self):
++        """Try to get docstring from parent classes."""
++        def find_docstring(cls, attrname):
++            try:
++                analyzer = ModuleAnalyzer.for_module(cls.__module__)
++                analyzer.analyze()
++                key = (cls.__module__, attrname)
++                if key in analyzer.attr_docs:
++                    return analyzer.attr_docs[key]
++            except PycodeError:
++                pass
++
++            try:
++                attr = safe_getattr(cls, attrname)
++                if hasattr(attr, '__doc__') and attr.__doc__:
++                    return attr.__doc__
++            except (AttributeError, ValueError):
++                pass
++
++            return None
++
++        # Walk up base classes
++        def traverse_bases(cls, attrname):
++            docstring = find_docstring(cls, attrname)
++            if docstring:
++                return docstring
++                
++            for base in getattr(cls, '__bases__', []):
++                docstring = traverse_bases(base, attrname)
++                if docstring:
++                    return docstring
++                    
++            return None
++            
++        return traverse_bases(self.parent.__class__, self.objpath[-1])
++
++
++def setup(app):
++    """Register the extension."""
++    # Patch base AttributeDocumenter with inheritance support
++    from sphinx.ext.autodoc import AttributeDocumenter
++    AttributeDocumenter.__bases__ = (
++        AttributeDocumenterWithInheritance,) + AttributeDocumenter.__bases__
++        
++    return {
++        'version': '1.0',
++        'parallel_read_safe': True,
++        'parallel_write_safe': True
++    }
+\ No newline at end of file
+diff --git a/sphinx/ext/autodoc_inheritance/documenter.py b/sphinx/ext/autodoc_inheritance/documenter.py
+new file mode 100644
+index 000000000..419d234d4
+--- /dev/null
++++ b/sphinx/ext/autodoc_inheritance/documenter.py
+@@ -0,0 +1,25 @@
++"""Enhanced attribute documenter with docstring inheritance."""
++
++from sphinx.ext.autodoc import AttributeDocumenter
++from sphinx.ext.autodoc_inheritance import get_inherited_attribute_docstring
++
++
++class InheritedAttributeDocumenter(AttributeDocumenter):
++    """Enhanced attribute documenter that supports docstring inheritance."""
++
++    def get_doc(self, encoding=None, ignore=1):
++        """Get docstring for the attribute.
++        
++        This version supports inheritance - if no docstring is found in the current class,
++        it looks up the parent classes.
++        """
++        # First try the standard docstring lookup
++        docstring = super().get_doc(encoding, ignore)
++
++        # If no docstring found, try inheritance
++        if not docstring:
++            inherited_doc = get_inherited_attribute_docstring(self.parent, self.objpath[-1])
++            if inherited_doc:
++                docstring = [inherited_doc.splitlines()]
++
++        return docstring
+\ No newline at end of file
+diff --git a/sphinx/ext/docstring_inheritance/__init__.py b/sphinx/ext/docstring_inheritance/__init__.py
+new file mode 100644
+index 000000000..3f6af3c7e
+--- /dev/null
++++ b/sphinx/ext/docstring_inheritance/__init__.py
+@@ -0,0 +1,112 @@
++"""Sphinx extension for better docstring inheritance handling."""
++
++from typing import Any, Dict, List, Optional, Tuple
++import re
++import inspect
++
++from docutils.statemachine import StringList
++
++from sphinx.application import Sphinx
++from sphinx.pycode import ModuleAnalyzer, PycodeError
++from sphinx.util.docstrings import prepare_docstring
++
++
++def get_inherited_docstring(cls: Any, name: str) -> Optional[str]:
++    """Get docstring for an attribute by searching parent classes.
++    
++    Args:
++        cls: The class to search from
++        name: Name of the attribute
++        
++    Returns:
++        Found docstring or None
++    """
++    def extract_inline_docstring(code: str) -> Optional[str]:
++        """Extract inline docstring from code."""
++        if code:
++            match = re.search(r'\s*#:\s*(.+)$', code)
++            if match:
++                return match.group(1).strip()
++        return None
++
++    def get_docstring_from_class_code(cls: Any, name: str) -> Optional[str]:
++        """Extract docstring from class source code."""
++        try:
++            source = inspect.getsource(cls)
++            for line in source.split('\n'):
++                if f'self.{name}' in line:
++                    docstring = extract_inline_docstring(line)
++                    if docstring:
++                        return docstring
++        except (TypeError, OSError):
++            pass
++        return None
++        
++    def get_docstring_from_analyzer(cls: Any, name: str) -> Optional[str]:
++        """Get docstring using module analyzer."""
++        try:
++            analyzer = ModuleAnalyzer.for_module(cls.__module__) 
++            analyzer.analyze()
++            key = (cls.__module__, name)
++            if key in analyzer.attr_docs:
++                return analyzer.attr_docs[key]
++        except PycodeError:
++            pass
++        return None
++
++    # Try getting docstring from this class
++    docstring = get_docstring_from_class_code(cls, name)
++    if docstring:
++        return docstring
++        
++    docstring = get_docstring_from_analyzer(cls, name)
++    if docstring:
++        return docstring
++        
++    # Try parent classes
++    for base in cls.__bases__:
++        docstring = get_inherited_docstring(base, name)
++        if docstring:
++            return docstring
++            
++    return None
++
++
++def process_docstring(app: Sphinx, what: str, name: str,
++                     obj: Any, options: Dict, lines: List[str]) -> None:
++    """Add inherited docstrings for attributes."""
++    if what != 'attribute' or lines:
++        return
++
++    # Get parent class from attribute name
++    parent = None
++    if '.' in name:
++        parent_name = name.rsplit('.', 2)[0]
++        try:
++            parts = parent_name.split('.')
++            module = __import__(parts[0])
++            for part in parts[1:]:
++                module = getattr(module, part)
++            parent = module
++        except (ImportError, AttributeError):
++            return
++
++        attr_name = name.split('.')[-1]
++        docstring = get_inherited_docstring(parent, attr_name)
++        if docstring:
++            lines.extend(prepare_docstring(docstring))
++
++
++def setup(app: Sphinx) -> Dict[str, Any]:
++    """Register the extension."""
++    # Add autodoc as requirement
++    app.setup_extension('sphinx.ext.autodoc')
++    
++    app.connect('autodoc-process-docstring', process_docstring, priority=100)
++    
++    return {
++        'version': '1.0',
++        'parallel_read_safe': True,
++        'parallel_write_safe': True,
++        'env_version': 1,
++    }
+\ No newline at end of file
+diff --git a/sphinx/ext/inherited_docstrings.py b/sphinx/ext/inherited_docstrings.py
+new file mode 100644
+index 000000000..8f1e03d39
+--- /dev/null
++++ b/sphinx/ext/inherited_docstrings.py
+@@ -0,0 +1,64 @@
++"""Extension to support docstring inheritance for attributes."""
++
++from sphinx.application import Sphinx
++from sphinx.pycode import ModuleAnalyzer, PycodeError
++
++
++def get_inherited_docstring(cls, name):
++    """Get docstring for an attribute by searching parent classes.
++    
++    Args:
++        cls: The class to search from
++        name: Name of the attribute to find docstring for
++        
++    Returns:
++        Found docstring or None
++    """
++    def get_docstring(module, attrname):
++        try:
++            analyzer = ModuleAnalyzer.for_module(module)
++            analyzer.analyze()
++            key = (module, attrname)
++            if key in analyzer.attr_docs:
++                return analyzer.attr_docs[key]
++        except PycodeError:
++            pass
++        return None
++        
++    # First check this class
++    docstring = get_docstring(cls.__module__, name)
++    if docstring:
++        return docstring
++        
++    # Then check base classes
++    for base in cls.__bases__:
++        docstring = get_inherited_docstring(base, name)
++        if docstring:
++            return docstring
++            
++    return None
++    
++
++def process_docstring(app, what, name, obj, options, lines):
++    """Process docstring to add inherited docstrings for attributes."""
++    if what != 'attribute' or lines or not options.get('inherited-members'):
++        return
++        
++    class_name = '.'.join(name.split('.')[:-1])
++    parent = app.env.temp_data.get('autodoc:class')
++    
++    if parent:
++        docstring = get_inherited_docstring(parent, name.split('.')[-1]) 
++        if docstring:
++            lines.extend(docstring.splitlines())
++
++
++def setup(app: Sphinx) -> dict:
++    """Register the docstring inheritance extension."""
++    app.connect('autodoc-process-docstring', process_docstring)
++    
++    return {
++        'version': '1.0',
++        'parallel_read_safe': True,
++        'parallel_write_safe': True,
++    }
 \ No newline at end of file

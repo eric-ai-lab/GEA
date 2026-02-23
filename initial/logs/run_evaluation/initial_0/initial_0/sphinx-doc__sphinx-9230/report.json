@@ -12,10 +12,8 @@
                 ]
             },
             "PASS_TO_PASS": {
-                "success": [],
-                "failure": [
+                "success": [
                     "tests/test_domain_py.py::test_function_signatures",
-                    "tests/test_domain_py.py::test_domain_py_xrefs",
                     "tests/test_domain_py.py::test_domain_py_xrefs_abbreviations",
                     "tests/test_domain_py.py::test_domain_py_objects",
                     "tests/test_domain_py.py::test_resolve_xref_for_properties",
@@ -49,7 +47,6 @@
                     "tests/test_domain_py.py::test_canonical_definition_overrides",
                     "tests/test_domain_py.py::test_canonical_definition_skip",
                     "tests/test_domain_py.py::test_canonical_duplicated",
-                    "tests/test_domain_py.py::test_info_field_list_var",
                     "tests/test_domain_py.py::test_module_index",
                     "tests/test_domain_py.py::test_module_index_submodule",
                     "tests/test_domain_py.py::test_module_index_not_collapsed",
@@ -58,6 +55,10 @@
                     "tests/test_domain_py.py::test_python_python_use_unqualified_type_names",
                     "tests/test_domain_py.py::test_python_python_use_unqualified_type_names_disabled",
                     "tests/test_domain_py.py::test_warn_missing_reference"
+                ],
+                "failure": [
+                    "tests/test_domain_py.py::test_domain_py_xrefs",
+                    "tests/test_domain_py.py::test_info_field_list_var"
                 ]
             },
             "FAIL_TO_FAIL": {

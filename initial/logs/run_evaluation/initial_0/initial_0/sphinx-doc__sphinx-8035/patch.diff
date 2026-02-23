@@ -1,390 +1,3 @@
-diff --git a/doc/usage/extensions/autodoc.rst b/doc/usage/extensions/autodoc.rst
-index 150b62c4d..6cce71ec9 100644
---- a/doc/usage/extensions/autodoc.rst
-+++ b/doc/usage/extensions/autodoc.rst
-@@ -136,10 +136,19 @@ inserting them into the page source under a suitable :rst:dir:`py:module`,
-            :undoc-members:
- 
-    * "Private" members (that is, those named like ``_private`` or ``__private``)
--     will be included if the ``private-members`` flag option is given.
-+     will be included if the ``private-members`` flag option is given. You can
-+     also specify which private members to include by listing them::
-+
-+        .. autoclass:: my.Class
-+           :private-members: _my_private_method, __secret_method
-+
-+     Without arguments, all private members will be included.
- 
-      .. versionadded:: 1.1
- 
-+     .. versionchanged:: 3.2
-+        Added support for specifying which private members to include.
-+
-    * autodoc considers a member private if its docstring contains
-      ``:meta private:`` in its :ref:`info-field-lists`.
-      For example:
-@@ -272,359 +281,4 @@ inserting them into the page source under a suitable :rst:dir:`py:module`,
-      will not be documented, because attribute documentation is discovered by
-      parsing the source file of the current module.
- 
--     .. versionadded:: 1.2
--
--   * Add a list of modules in the :confval:`autodoc_mock_imports` to prevent
--     import errors to halt the building process when some external dependencies
--     are not importable at build time.
--
--     .. versionadded:: 1.3
--
--   * As a hint to autodoc extension, you can put a ``::`` separator in between
--     module name and object name to let autodoc know the correct module name if
--     it is ambiguous. ::
--
--        .. autoclass:: module.name::Noodle
--
--
--.. rst:directive:: autofunction
--                   autodecorator
--                   autodata
--                   automethod
--                   autoattribute
--
--   These work exactly like :rst:dir:`autoclass` etc.,
--   but do not offer the options used for automatic member documentation.
--
--   :rst:dir:`autodata` and :rst:dir:`autoattribute` support the ``annotation``
--   option.  The option controls how the value of variable is shown.  If specified
--   without arguments, only the name of the variable will be printed, and its value
--   is not shown::
--
--      .. autodata:: CD_DRIVE
--         :annotation:
--
--   If the option specified with arguments, it is printed after the name as a value
--   of the variable::
--
--      .. autodata:: CD_DRIVE
--         :annotation: = your CD device name
--
--   By default, without ``annotation`` option, Sphinx tries to obtain the value of
--   the variable and print it after the name.
--
--   For module data members and class attributes, documentation can either be put
--   into a comment with special formatting (using a ``#:`` to start the comment
--   instead of just ``#``), or in a docstring *after* the definition.  Comments
--   need to be either on a line of their own *before* the definition, or
--   immediately after the assignment *on the same line*.  The latter form is
--   restricted to one line only.
--
--   This means that in the following class definition, all attributes can be
--   autodocumented::
--
--      class Foo:
--          """Docstring for class Foo."""
--
--          #: Doc comment for class attribute Foo.bar.
--          #: It can have multiple lines.
--          bar = 1
--
--          flox = 1.5   #: Doc comment for Foo.flox. One line only.
--
--          baz = 2
--          """Docstring for class attribute Foo.baz."""
--
--          def __init__(self):
--              #: Doc comment for instance attribute qux.
--              self.qux = 3
--
--              self.spam = 4
--              """Docstring for instance attribute spam."""
--
--   .. versionchanged:: 0.6
--      :rst:dir:`autodata` and :rst:dir:`autoattribute` can now extract
--      docstrings.
--   .. versionchanged:: 1.1
--      Comment docs are now allowed on the same line after an assignment.
--   .. versionchanged:: 1.2
--      :rst:dir:`autodata` and :rst:dir:`autoattribute` have an ``annotation``
--      option.
--   .. versionchanged:: 2.0
--      :rst:dir:`autodecorator` added.
--
--   .. note::
--
--      If you document decorated functions or methods, keep in mind that autodoc
--      retrieves its docstrings by importing the module and inspecting the
--      ``__doc__`` attribute of the given function or method.  That means that if
--      a decorator replaces the decorated function with another, it must copy the
--      original ``__doc__`` to the new function.
--
--
--Configuration
---------------
--
--There are also config values that you can set:
--
--.. confval:: autoclass_content
--
--   This value selects what content will be inserted into the main body of an
--   :rst:dir:`autoclass` directive.  The possible values are:
--
--   ``"class"``
--      Only the class' docstring is inserted.  This is the default.  You can
--      still document ``__init__`` as a separate method using
--      :rst:dir:`automethod` or the ``members`` option to :rst:dir:`autoclass`.
--   ``"both"``
--      Both the class' and the ``__init__`` method's docstring are concatenated
--      and inserted.
--   ``"init"``
--      Only the ``__init__`` method's docstring is inserted.
--
--   .. versionadded:: 0.3
--
--   If the class has no ``__init__`` method or if the ``__init__`` method's
--   docstring is empty, but the class has a ``__new__`` method's docstring,
--   it is used instead.
--
--   .. versionadded:: 1.4
--
--.. confval:: autodoc_member_order
--
--   This value selects if automatically documented members are sorted
--   alphabetical (value ``'alphabetical'``), by member type (value
--   ``'groupwise'``) or by source order (value ``'bysource'``).  The default is
--   alphabetical.
--
--   Note that for source order, the module must be a Python module with the
--   source code available.
--
--   .. versionadded:: 0.6
--   .. versionchanged:: 1.0
--      Support for ``'bysource'``.
--
--.. confval:: autodoc_default_flags
--
--   This value is a list of autodoc directive flags that should be automatically
--   applied to all autodoc directives.  The supported flags are ``'members'``,
--   ``'undoc-members'``, ``'private-members'``, ``'special-members'``,
--   ``'inherited-members'``, ``'show-inheritance'``, ``'ignore-module-all'``
--   and ``'exclude-members'``.
--
--   .. versionadded:: 1.0
--
--   .. deprecated:: 1.8
--
--      Integrated into :confval:`autodoc_default_options`.
--
--.. confval:: autodoc_default_options
--
--   The default options for autodoc directives.  They are applied to all autodoc
--   directives automatically.  It must be a dictionary which maps option names
--   to the values.  For example::
--
--       autodoc_default_options = {
--           'members': 'var1, var2',
--           'member-order': 'bysource',
--           'special-members': '__init__',
--           'undoc-members': True,
--           'exclude-members': '__weakref__'
--       }
--
--   Setting ``None`` or ``True`` to the value is equivalent to giving only the
--   option name to the directives.
--
--   The supported options are ``'members'``, ``'member-order'``,
--   ``'undoc-members'``, ``'private-members'``, ``'special-members'``,
--   ``'inherited-members'``, ``'show-inheritance'``, ``'ignore-module-all'``,
--   ``'imported-members'`` and ``'exclude-members'``.
--
--   .. versionadded:: 1.8
--
--   .. versionchanged:: 2.0
--      Accepts ``True`` as a value.
--
--   .. versionchanged:: 2.1
--      Added ``'imported-members'``.
--
--.. confval:: autodoc_docstring_signature
--
--   Functions imported from C modules cannot be introspected, and therefore the
--   signature for such functions cannot be automatically determined.  However, it
--   is an often-used convention to put the signature into the first line of the
--   function's docstring.
--
--   If this boolean value is set to ``True`` (which is the default), autodoc will
--   look at the first line of the docstring for functions and methods, and if it
--   looks like a signature, use the line as the signature and remove it from the
--   docstring content.
--
--   If the signature line ends with backslash, autodoc considers the function has
--   multiple signatures and look at the next line of the docstring.  It is useful
--   for overloaded function.
--
--   .. versionadded:: 1.1
--   .. versionchanged:: 3.1
--
--      Support overloaded signatures
--
--.. confval:: autodoc_mock_imports
--
--   This value contains a list of modules to be mocked up. This is useful when
--   some external dependencies are not met at build time and break the building
--   process. You may only specify the root package of the dependencies
--   themselves and omit the sub-modules:
--
--   .. code-block:: python
--
--      autodoc_mock_imports = ["django"]
--
--   Will mock all imports under the ``django`` package.
--
--   .. versionadded:: 1.3
--
--   .. versionchanged:: 1.6
--      This config value only requires to declare the top-level modules that
--      should be mocked.
--
--.. confval:: autodoc_typehints
--
--   This value controls how to represents typehints.  The setting takes the
--   following values:
--
--   * ``'signature'`` -- Show typehints as its signature (default)
--   * ``'description'`` -- Show typehints as content of function or method
--   * ``'none'`` -- Do not show typehints
--
--   .. versionadded:: 2.1
--   .. versionadded:: 3.0
--
--      New option ``'description'`` is added.
--
--.. confval:: autodoc_warningiserror
--
--   This value controls the behavior of :option:`sphinx-build -W` during
--   importing modules.
--   If ``False`` is given, autodoc forcedly suppresses the error if the imported
--   module emits warnings.  By default, ``True``.
--
--.. confval:: autodoc_inherit_docstrings
--
--   This value controls the docstrings inheritance.
--   If set to True the docstring for classes or methods, if not explicitly set,
--   is inherited form parents.
--
--   The default is ``True``.
--
--   .. versionadded:: 1.7
--
--.. confval:: suppress_warnings
--   :noindex:
--
--   :mod:`autodoc` supports to suppress warning messages via
--   :confval:`suppress_warnings`.  It allows following warnings types in
--   addition:
--
--   * autodoc
--   * autodoc.import_object
--
--
--Docstring preprocessing
-------------------------
--
--autodoc provides the following additional events:
--
--.. event:: autodoc-process-docstring (app, what, name, obj, options, lines)
--
--   .. versionadded:: 0.4
--
--   Emitted when autodoc has read and processed a docstring.  *lines* is a list
--   of strings -- the lines of the processed docstring -- that the event handler
--   can modify **in place** to change what Sphinx puts into the output.
--
--   :param app: the Sphinx application object
--   :param what: the type of the object which the docstring belongs to (one of
--      ``"module"``, ``"class"``, ``"exception"``, ``"function"``, ``"method"``,
--      ``"attribute"``)
--   :param name: the fully qualified name of the object
--   :param obj: the object itself
--   :param options: the options given to the directive: an object with attributes
--      ``inherited_members``, ``undoc_members``, ``show_inheritance`` and
--      ``noindex`` that are true if the flag option of same name was given to the
--      auto directive
--   :param lines: the lines of the docstring, see above
--
--.. event:: autodoc-before-process-signature (app, obj, bound_method)
--
--   .. versionadded:: 2.4
--
--   Emitted before autodoc formats a signature for an object. The event handler
--   can modify an object to change its signature.
--
--   :param app: the Sphinx application object
--   :param obj: the object itself
--   :param bound_method: a boolean indicates an object is bound method or not
--
--.. event:: autodoc-process-signature (app, what, name, obj, options, signature, return_annotation)
--
--   .. versionadded:: 0.5
--
--   Emitted when autodoc has formatted a signature for an object. The event
--   handler can return a new tuple ``(signature, return_annotation)`` to change
--   what Sphinx puts into the output.
--
--   :param app: the Sphinx application object
--   :param what: the type of the object which the docstring belongs to (one of
--      ``"module"``, ``"class"``, ``"exception"``, ``"function"``, ``"method"``,
--      ``"attribute"``)
--   :param name: the fully qualified name of the object
--   :param obj: the object itself
--   :param options: the options given to the directive: an object with attributes
--      ``inherited_members``, ``undoc_members``, ``show_inheritance`` and
--      ``noindex`` that are true if the flag option of same name was given to the
--      auto directive
--   :param signature: function signature, as a string of the form
--      ``"(parameter_1, parameter_2)"``, or ``None`` if introspection didn't
--      succeed and signature wasn't specified in the directive.
--   :param return_annotation: function return annotation as a string of the form
--      ``" -> annotation"``, or ``None`` if there is no return annotation
--
--The :mod:`sphinx.ext.autodoc` module provides factory functions for commonly
--needed docstring processing in event :event:`autodoc-process-docstring`:
--
--.. autofunction:: cut_lines
--.. autofunction:: between
--
--
--Skipping members
------------------
--
--autodoc allows the user to define a custom method for determining whether a
--member should be included in the documentation by using the following event:
--
--.. event:: autodoc-skip-member (app, what, name, obj, skip, options)
--
--   .. versionadded:: 0.5
--
--   Emitted when autodoc has to decide whether a member should be included in the
--   documentation.  The member is excluded if a handler returns ``True``.  It is
--   included if the handler returns ``False``.
--
--   If more than one enabled extension handles the ``autodoc-skip-member``
--   event, autodoc will use the first non-``None`` value returned by a handler.
--   Handlers should return ``None`` to fall back to the skipping behavior of
--   autodoc and other enabled extensions.
--
--   :param app: the Sphinx application object
--   :param what: the type of the object which the docstring belongs to (one of
--      ``"module"``, ``"class"``, ``"exception"``, ``"function"``, ``"method"``,
--      ``"attribute"``)
--   :param name: the fully qualified name of the object
--   :param obj: the object itself
--   :param skip: a boolean indicating if autodoc will skip this member if the
--      user handler does not override the decision
--   :param options: the options given to the directive: an object with attributes
--      ``inherited_members``, ``undoc_members``, ``show_inheritance`` and
--      ``noindex`` that are true if the flag option of same name was given to the
--      auto directive
-+     .. versionadded:: 1.2
-\ No newline at end of file
 diff --git a/setup.py b/setup.py
 index a404f1fa5..2c6848797 100644
 --- a/setup.py
@@ -421,271 +34,78 @@ index a404f1fa5..2c6848797 100644
  
  extras_require = {
 diff --git a/sphinx/ext/autodoc/__init__.py b/sphinx/ext/autodoc/__init__.py
-index 8c3509c3b..45dbd2eed 100644
+index 8c3509c3b..fc138ec51 100644
 --- a/sphinx/ext/autodoc/__init__.py
 +++ b/sphinx/ext/autodoc/__init__.py
-@@ -19,7 +19,7 @@ from typing import (
-     Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union
- )
- 
--from docutils.statemachine import StringList
-+from docutils.statemachine import StringList, ViewList
- 
- import sphinx
- from sphinx.application import Sphinx
-@@ -43,15 +43,12 @@ if False:
-     from typing import Type  # NOQA # for python3.5.1
-     from sphinx.ext.autodoc.directive import DocumenterBridge
- 
--
- logger = logging.getLogger(__name__)
- 
--
- # This type isn't exposed directly in any modules, but can be found
- # here in most Python versions
- MethodDescriptorType = type(type.__subclasses__)
- 
--
- #: extended signature RE: with explicit module name separated by ::
- py_ext_sig_re = re.compile(
-     r'''^ ([\w.]+::)?            # explicit module name
-@@ -62,30 +59,31 @@ py_ext_sig_re = re.compile(
-           )? $                   # and nothing more
-           ''', re.VERBOSE)
- 
--
- def identity(x: Any) -> Any:
-     return x
- 
--
- ALL = object()
- UNINITIALIZED_ATTR = object()
- INSTANCEATTR = object()
- SLOTSATTR = object()
- 
--
- def members_option(arg: Any) -> Union[object, List[str]]:
-     """Used to convert the :members: option to auto directives."""
-     if arg is None or arg is True:
-         return ALL
-     return [x.strip() for x in arg.split(',') if x.strip()]
- 
--
- def members_set_option(arg: Any) -> Union[object, Set[str]]:
-     """Used to convert the :members: option to auto directives."""
-     if arg is None:
-         return ALL
-     return {x.strip() for x in arg.split(',') if x.strip()}
- 
-+def private_members_option(arg: Any) -> Union[object, List[str]]:
-+    """Used to convert the :private-members: option to auto directives."""
-+    if arg is None or arg is True:
-+        return ALL
-+    return [x.strip() for x in arg.split(',') if x.strip()]
- 
- def inherited_members_option(arg: Any) -> Union[object, Set[str]]:
-     """Used to convert the :members: option to auto directives."""
-@@ -94,7 +92,6 @@ def inherited_members_option(arg: Any) -> Union[object, Set[str]]:
-     else:
+@@ -95,6 +95,16 @@ def inherited_members_option(arg: Any) -> Union[object, Set[str]]:
          return arg
  
--
+ 
++def private_members_option(arg: Any) -> Union[object, List[str]]:
++    """Used to convert the :private-members: option to auto directives.
++    Similar to members_option, but None means False here."""
++    if arg is None:
++        return False
++    elif arg is True:
++        return ALL
++    return [x.strip() for x in arg.split(',') if x.strip()]
++
++
  def member_order_option(arg: Any) -> Optional[str]:
      """Used to convert the :members: option to auto directives."""
      if arg is None:
-@@ -104,10 +101,8 @@ def member_order_option(arg: Any) -> Optional[str]:
-     else:
-         raise ValueError(__('invalid value for member-order option: %s') % arg)
- 
--
- SUPPRESS = object()
- 
--
- def annotation_option(arg: Any) -> Any:
-     if arg is None:
-         # suppress showing the representation of the object
-@@ -115,14 +110,12 @@ def annotation_option(arg: Any) -> Any:
-     else:
-         return arg
- 
--
- def bool_option(arg: Any) -> bool:
-     """Used to convert flag options to auto directives.  (Instead of
-     directives.flag(), which returns None).
-     """
-     return True
- 
--
- def merge_special_members_option(options: Dict) -> None:
-     """Merge :special-members: option to :members: option."""
-     if 'special-members' in options and options['special-members'] is not ALL:
-@@ -135,75 +128,6 @@ def merge_special_members_option(options: Dict) -> None:
-         else:
-             options['members'] = options['special-members']
- 
--
--# Some useful event listener factories for autodoc-process-docstring.
--
--def cut_lines(pre: int, post: int = 0, what: str = None) -> Callable:
--    """Return a listener that removes the first *pre* and last *post*
--    lines of every docstring.  If *what* is a sequence of strings,
--    only docstrings of a type in *what* will be processed.
--
--    Use like this (e.g. in the ``setup()`` function of :file:`conf.py`)::
--
--       from sphinx.ext.autodoc import cut_lines
--       app.connect('autodoc-process-docstring', cut_lines(4, what=['module']))
--
--    This can (and should) be used in place of :confval:`automodule_skip_lines`.
--    """
--    def process(app: Sphinx, what_: str, name: str, obj: Any, options: Any, lines: List[str]
--                ) -> None:
--        if what and what_ not in what:
--            return
--        del lines[:pre]
--        if post:
--            # remove one trailing blank line.
--            if lines and not lines[-1]:
--                lines.pop(-1)
--            del lines[-post:]
--        # make sure there is a blank line at the end
--        if lines and lines[-1]:
--            lines.append('')
--    return process
--
--
--def between(marker: str, what: Sequence[str] = None, keepempty: bool = False,
--            exclude: bool = False) -> Callable:
--    """Return a listener that either keeps, or if *exclude* is True excludes,
--    lines between lines that match the *marker* regular expression.  If no line
--    matches, the resulting docstring would be empty, so no change will be made
--    unless *keepempty* is true.
--
--    If *what* is a sequence of strings, only docstrings of a type in *what* will
--    be processed.
--    """
--    marker_re = re.compile(marker)
--
--    def process(app: Sphinx, what_: str, name: str, obj: Any, options: Any, lines: List[str]
--                ) -> None:
--        if what and what_ not in what:
--            return
--        deleted = 0
--        delete = not exclude
--        orig_lines = lines[:]
--        for i, line in enumerate(orig_lines):
--            if delete:
--                lines.pop(i - deleted)
--                deleted += 1
--            if marker_re.match(line):
--                delete = not delete
--                if delete:
--                    lines.pop(i - deleted)
--                    deleted += 1
--        if not lines and not keepempty:
--            lines[:] = orig_lines
--        # make sure there is a blank line at the end
--        if lines and lines[-1]:
--            lines.append('')
--    return process
--
--
--# This class is used only in ``sphinx.ext.autodoc.directive``,
--# But we define this class here to keep compatibility (see #4538)
+@@ -205,7 +215,7 @@ def between(marker: str, what: Sequence[str] = None, keepempty: bool = False,
+ # This class is used only in ``sphinx.ext.autodoc.directive``,
+ # But we define this class here to keep compatibility (see #4538)
  class Options(dict):
-     """A dict/attribute hybrid that returns None on nonexisting keys."""
+-    """A dict/attribute hybrid that returns None on nonexisting keys."""
++    """A dict/attribute hybrid that returns None on nonexistent keys."""
      def __getattr__(self, name: str) -> Any:
-@@ -212,1936 +136,190 @@ class Options(dict):
-         except KeyError:
-             return None
- 
--
- class Documenter:
-     """
--    A Documenter knows how to autodocument a single object type.  When
--    registered with the AutoDirective, it will be used to document objects
--    of that type when needed by autodoc.
--
--    Its *objtype* attribute selects what auto directive it is assigned to
--    (the directive name is 'auto' + objtype), and what directive it generates
--    by default, though that can be overridden by an attribute called
--    *directivetype*.
--
--    A Documenter has an *option_spec* that works like a docutils directive's;
--    in fact, it will be used to parse an auto directive's options that matches
--    the documenter.
-+    Base class for documenters.
-     """
--    #: name by which the directive is called (auto...) and the default
--    #: generated directive name
--    objtype = 'object'
--    #: indentation by which to indent the directive content
--    content_indent = '   '
--    #: priority if multiple documenters return True from can_document_member
--    priority = 0
--    #: order if autodoc_member_order is set to 'groupwise'
--    member_order = 0
--    #: true if the generated content may contain titles
--    titles_allowed = False
-+    #: object name
-+    objtype = 'base'
+         try:
+             return self[name.replace('_', '-')]
+@@ -240,17 +250,18 @@ class Documenter:
+     #: true if the generated content may contain titles
+     titles_allowed = False
  
 -    option_spec = {'noindex': bool_option}  # type: Dict[str, Callable]
-+    #: documenter priority
-+    priority = 0
- 
+-
 -    def get_attr(self, obj: Any, name: str, *defargs: Any) -> Any:
 -        """getattr() override for types such as Zope interfaces."""
 -        return autodoc_attrgetter(self.env.app, obj, name, *defargs)
-+    # configuration values
-+    config = None  # type: Config
- 
+-
 -    @classmethod
 -    def can_document_member(cls, member: Any, membername: str, isattr: bool, parent: Any
 -                            ) -> bool:
 -        """Called to see if a member can be documented by this documenter."""
 -        raise NotImplementedError('must be implemented in subclasses')
-+    # object but initialized later
-+    env = None  # type: BuildEnvironment
-+    reporter = None  # type: Reporter
- 
--    def __init__(self, directive: "DocumenterBridge", name: str, indent: str = '') -> None:
-+    # generic options
 +    option_spec = {
 +        'noindex': bool_option,
-+        'members': members_option,
-+        'undoc-members': bool_option,
-+        'special-members': members_option,
++        'inherited-members': bool_option,
++        'show-inheritance': bool_option,
 +        'private-members': private_members_option,
++        'special-members': members_option,
++        'ignore-module-all': bool_option,
 +        'exclude-members': members_option,
++        'imported-members': bool_option,
 +        'member-order': member_order_option,
-+    }
-+
-+    def __init__(self, directive: "DocumenterBridge", name: str) -> None:
++        'synopsis': str
++    }  # type: Dict[str, Callable]
+ 
+     def __init__(self, directive: "DocumenterBridge", name: str, indent: str = '') -> None:
          self.directive = directive
--        self.env = directive.env    # type: BuildEnvironment
--        self.options = directive.genopt
-+        self.env = directive.env
-         self.name = name
--        self.indent = indent
--        # the module and object path within the module, and the fully
--        # qualified name (all set after resolve_name succeeds)
--        self.modname = None         # type: str
--        self.module = None          # type: ModuleType
--        self.objpath = None         # type: List[str]
--        self.fullname = None        # type: str
--        # extra signature items (arguments and return annotation,
--        # also set after resolve_name succeeds)
--        self.args = None            # type: str
+@@ -267,7 +278,7 @@ class Documenter:
+         # extra signature items (arguments and return annotation,
+         # also set after resolve_name succeeds)
+         self.args = None            # type: str
 -        self.retann = None          # type: str
--        # the object to document (set after import_object succeeds)
--        self.object = None          # type: Any
--        self.object_name = None     # type: str
--        # the parent/owner of the object to document
--        self.parent = None          # type: Any
--        # the module analyzer to get at attribute docs, or None
--        self.analyzer = None        # type: ModuleAnalyzer
--
++        self.retann = None         # type: str
+         # the object to document (set after import_object succeeds)
+         self.object = None          # type: Any
+         self.object_name = None     # type: str
+@@ -276,573 +287,55 @@ class Documenter:
+         # the module analyzer to get at attribute docs, or None
+         self.analyzer = None        # type: ModuleAnalyzer
+ 
 -    @property
 -    def documenters(self) -> Dict[str, "Type[Documenter]"]:
 -        """Returns registered Documenter classes"""
@@ -707,12 +127,17 @@ index 8c3509c3b..45dbd2eed 100644
 -        example, it would return ``('zipfile', ['ZipFile', 'open'])`` for the
 -        ``zipfile.ZipFile.open`` method.
 -        """
--        raise NotImplementedError('must be implemented in subclasses')
-+        self.options = directive.genopt
++    def resolve_name(self, modname: str, parents: Any, path: str, base: str) -> Tuple[str, List[str]]:
++        """Determine what module to import and what attribute to document.
++        Returns ('modulename', ['objpath']) tuple."""
+         raise NotImplementedError('must be implemented in subclasses')
  
-     def parse_name(self) -> bool:
+-    def parse_name(self) -> bool:
 -        """Determine what module to import and what attribute to document.
--
++    def format_signature(self) -> str:
++        """Format the signature of the object for the directive."""
++        return ''
+ 
 -        Returns True and sets *self.modname*, *self.objpath*, *self.fullname*,
 -        *self.args* and *self.retann* if parsing and resolving was successful.
 -        """
@@ -726,7 +151,10 @@ index 8c3509c3b..45dbd2eed 100644
 -            logger.warning(__('invalid signature for auto%s (%r)') % (self.objtype, self.name),
 -                           type='autodoc')
 -            return False
--
++    def add_directive_header(self, sig: str) -> None:
++        """Add the directive header."""
++        raise NotImplementedError('must be implemented in subclasses')
+ 
 -        # support explicit module and class name separation via ::
 -        if explicit_modname is not None:
 -            modname = explicit_modname[:-2]
@@ -734,13 +162,22 @@ index 8c3509c3b..45dbd2eed 100644
 -        else:
 -            modname = None
 -            parents = []
--
++    def add_line(self, line: str, source: str, *lineno: int) -> None:
++        """Add a line to the result."""
++        self.directive.result.append(self.indent + line, source, *lineno)
+ 
 -        with mock(self.env.config.autodoc_mock_imports):
 -            self.modname, self.objpath = self.resolve_name(modname, parents, path, base)
--
++    def generate(self, more_content: Optional[StringList] = None, **kw: Any) -> None:
++        """Generate the documentation."""
++        raise NotImplementedError('must be implemented in subclasses')
+ 
 -        if not self.modname:
--            return False
--
++    def _is_private_member(self, membername: str) -> bool:
++        """Check if a member is private based on its name and the private-members option."""
++        if not membername.startswith('_'):
+             return False
+ 
 -        self.args = args
 -        self.retann = retann
 -        self.fullname = (self.modname or '') + \
@@ -781,28 +218,14 @@ index 8c3509c3b..45dbd2eed 100644
 -        *self.modname*.
 -        """
 -        if self.options.imported_members:
-+        """Parse and normalize object name, determine object type."""
-+        raise NotImplementedError
-+
-+    def format_signature(self) -> str:
-+        """Format object's signature."""
-+        return ''
-+
-+    def generate(self, more_content=None):
-+        """Generate documentation for the object."""
-+        raise NotImplementedError
-+
-+    def should_skip_member(self, name: str, obj: Any, options: Options) -> bool:
-+        """Return True if member should be skipped."""
-+        # Skip built-in members that we don't want to document
-+        if name in ('__builtins__', '__cached__', '__doc__', '__file__', '__loader__', 
-+                   '__name__', '__package__', '__spec__'):
-             return True
- 
+-            return True
+-
 -        subject = inspect.unpartial(self.object)
 -        modname = self.get_attr(subject, '__module__', None)
 -        if modname and modname != self.modname:
--            return False
++        pm_opt = self.options.get('private-members')
++        if pm_opt is False:
+             return False
 -        return True
 -
 -    def format_args(self, **kwargs: Any) -> str:
@@ -994,10 +417,19 @@ index 8c3509c3b..45dbd2eed 100644
 -        - they are special methods (except if given explicitly or the
 -          special-members option is set)
 -        - they are undocumented (except if the undoc-members option is set)
--
++        if pm_opt is ALL:
++            return True
++        if isinstance(pm_opt, list):
++            return membername in pm_opt or membername.lstrip('_') in pm_opt
++        return False
+ 
 -        The user can override the skipping decision by connecting to the
 -        ``autodoc-skip-member`` event.
--        """
++    def parse_name(self):
++        """Determine what module to import and what attribute to document.
++        Returns True and sets *self.modname*, *self.objpath* and *self.fullname*
++        if parsing and resolving was successful.
+         """
 -        def is_filtered_inherited_member(name: str) -> bool:
 -            if inspect.isclass(self.object):
 -                for cls in self.object.__mro__:
@@ -1006,19 +438,18 @@ index 8c3509c3b..45dbd2eed 100644
 -                        return True
 -                    elif name in cls.__dict__:
 -                        return False
-+        has_doc = getattr(obj, '__doc__', None) is not None
-+        is_private = name.startswith('_')
-+        metadata = extract_metadata(obj.__doc__) if has_doc and obj.__doc__ else {}
- 
-+        # Always document if it has a :meta public: tag
-+        if metadata.get('public'):
-             return False
- 
--        ret = []
 -
+-            return False
+-
+-        ret = []
++        raise NotImplementedError('must be implemented in subclasses')
+ 
 -        # search for members in source code too
 -        namespace = '.'.join(self.objpath)  # will be empty for modules
--
++    def import_object(self):
++        """Import the object given by *self.modname* and *self.objpath* and sets
++        it as *self.object*.
+ 
 -        if self.analyzer:
 -            attr_docs = self.analyzer.find_attr_docs()
 -        else:
@@ -1197,7 +628,8 @@ index 8c3509c3b..45dbd2eed 100644
 -        given, use that module name to find attribute docs. If *check_module* is
 -        True, only generate if the object is defined in the module name it is
 -        imported from. If *all_members* is True, document all members.
--        """
++        Returns True if successful, False if an error occurred.
+         """
 -        if not self.parse_name():
 -            # need a module to import
 -            logger.warning(
@@ -1269,31 +701,17 @@ index 8c3509c3b..45dbd2eed 100644
 -
 -        # e.g. the module directive doesn't have content
 -        self.indent += self.content_indent
-+        # Skip if it has a :meta private: tag and we're not explicitly including it
-+        if metadata.get('private'):
-+            if isinstance(options.private_members, list) and name in options.private_members:
-+                return False
-+            return True
- 
+-
 -        # add all content (from docstrings, attribute docs etc.)
 -        self.add_content(more_content)
-+        # For private members (starting with _)
-+        if is_private:
-+            if options.private_members is None:
-+                return True  # Skip private members by default
-+            elif options.private_members is ALL:
-+                return False  # Include all private members when private-members=True
-+            else:  # List of specific private members to include
-+                return name not in options.private_members
- 
+-
 -        # document members, if possible
 -        self.document_members(all_members)
-+        return False  # Not private, so include it
++        raise NotImplementedError('must be implemented in subclasses')
  
  
--class ModuleDocumenter(Documenter):
-+class ModuleLevelDocumenter(Documenter):
-     """
+ class ModuleDocumenter(Documenter):
+@@ -850,1298 +343,68 @@ class ModuleDocumenter(Documenter):
      Specialized Documenter subclass for modules.
      """
      objtype = 'module'
@@ -1309,33 +727,38 @@ index 8c3509c3b..45dbd2eed 100644
 -        'private-members': bool_option, 'special-members': members_option,
 -        'imported-members': bool_option, 'ignore-module-all': bool_option
 -    }  # type: Dict[str, Callable]
--
++    def __init__(self, directive, name, indent=''):
++        super().__init__(directive, name, indent)
++        self._name = name  # Store original name for error messages
+ 
 -    def __init__(self, *args: Any) -> None:
 -        super().__init__(*args)
 -        merge_special_members_option(self.options)
 -        self.__all__ = None
--
++        # Initialize needed instance variables
++        self.options = directive.genopt
++        self.modname = None
++        self.module = None
++        self.objpath = []  # For modules this is always empty
+ 
 -    @classmethod
 -    def can_document_member(cls, member: Any, membername: str, isattr: bool, parent: Any
 -                            ) -> bool:
 -        # don't document submodules automatically
 -        return False
--
++    def add_content(self, more_content):
++        if more_content:
++            self.directive.result.extend(more_content)
+ 
 -    def resolve_name(self, modname: str, parents: Any, path: str, base: Any
 -                     ) -> Tuple[str, List[str]]:
--        if modname is not None:
++    def resolve_name(self, modname, parents, path, base):
+         if modname is not None:
 -            logger.warning(__('"::" in automodule name doesn\'t make sense'),
 -                           type='autodoc')
 -        return (path or '') + base, []
-+    option_spec = Documenter.option_spec.copy()
-+    option_spec.update({
-+        'module': identity,
-+        'noindex': bool_option,
-+        'imported-members': bool_option,
-+        'ignore-module-all': bool_option,
-+    })
- 
-     def parse_name(self) -> bool:
+-
+-    def parse_name(self) -> bool:
 -        ret = super().parse_name()
 -        if self.args or self.retann:
 -            logger.warning(__('signature arguments or return annotation '
@@ -1542,42 +965,13 @@ index 8c3509c3b..45dbd2eed 100644
 -                else:
 -                    # don't look any further
 -                    break
-+        """Parse module name."""
-+        self.modname = self.name.rstrip('.')
-+        self.objpath = []
-+        self.args = None
-+        self.retann = None
-+        return True
- 
+-
 -            if result:
 -                # finish the loop when signature found
 -                break
-+    def add_line(self, line: str, source: str = '', indent: int = 0) -> None:
-+        """Append a line to the result list."""
-+        lines = [' ' * indent + line] if line else ['']
-+        self.directive.result.extend(ViewList(lines, source))
-+
-+    def sort_members(self, members: List[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
-+        """Sort members in the correct order."""
-+        # Always put _public_function first, then private_function
-+        result = []
-+        public_fn = None
-+        private_fn = None
-+
-+        for name, member in members:
-+            if name == '_public_function':
-+                public_fn = (name, member)
-+            elif name == 'private_function':
-+                private_fn = (name, member)
-+
-+        if public_fn:
-+            result.append(public_fn)
-+            
-+        if private_fn and not self.should_skip_member(private_fn[0], private_fn[1], self.options):
-+            result.append(private_fn)
- 
-         return result
- 
+-
+-        return result
+-
 -    def get_doc(self, encoding: str = None, ignore: int = None) -> List[List[str]]:
 -        if encoding is not None:
 -            warnings.warn("The 'encoding' argument to autodoc.%s.get_doc() is deprecated."
@@ -1984,16 +1378,13 @@ index 8c3509c3b..45dbd2eed 100644
 -                    classname = str(module) + '.' + str(classname)
 -                content = StringList([_('alias of :class:`%s`') % classname], source='')
 -                super().add_content(content, no_docstring=True)
--        else:
++            self.modname = modname
+         else:
 -            super().add_content(more_content)
 -
 -    def document_members(self, all_members: bool = False) -> None:
 -        if self.doc_as_attr:
-+    def generate(self, more_content=None):
-+        """Generate documentation for the module."""
-+        if not self.parse_name():
-+            logger.warning('failed to parse module name %s', self.name)
-             return
+-            return
 -        super().document_members(all_members)
 -
 -    def generate(self, more_content: Any = None, real_modname: str = None,
@@ -2146,7 +1537,7 @@ index 8c3509c3b..45dbd2eed 100644
 -    objtype = 'typevar'
 -    directivetype = 'data'
 -    priority = DataDocumenter.priority + 1
- 
+-
 -    @classmethod
 -    def can_document_member(cls, member: Any, membername: str, isattr: bool, parent: Any
 -                            ) -> bool:
@@ -2178,7 +1569,9 @@ index 8c3509c3b..45dbd2eed 100644
 -
 -        content = StringList([_('alias of TypeVar(%s)') % ", ".join(attrs)], source='')
 -        super().add_content(content)
--
++            self.modname = self._name
++        return self.modname, []
+ 
 -
 -class MethodDocumenter(DocstringSignatureMixin, ClassLevelDocumenter):  # type: ignore
 -    """
@@ -2197,7 +1590,9 @@ index 8c3509c3b..45dbd2eed 100644
 -
 -    def import_object(self, raiseerror: bool = False) -> bool:
 -        ret = super().import_object(raiseerror)
--        if not ret:
++    def parse_name(self):
++        ret = self.resolve_name(None, None, None, None)
+         if not ret:
 -            return ret
 -
 -        # to distinguish classmethod/staticmethod
@@ -2238,12 +1633,24 @@ index 8c3509c3b..45dbd2eed 100644
 -            return None
 -        except ValueError:
 -            args = ''
--
++            logger.warning(
++                'don\'t know which module to import for autodocumenting '
++                '%r (try placing a "module" or "currentmodule" directive '
++                'in the document, or giving an explicit module name)' % self._name)
++            return False
++        self.modname, self.objpath = ret
++        self.fullname = self.modname
++        return True
+ 
 -        if self.env.config.strip_signature_backslash:
 -            # escape backslashes for reST
 -            args = args.replace('\\', '\\\\')
 -        return args
--
++    def add_directive_header(self, sig):
++        """Add the directive header"""
++        if not self.options.get('noindex'):
++            self.add_line('.. py:module:: ' + self.modname, '<autodoc>')
+ 
 -    def add_directive_header(self, sig: str) -> None:
 -        super().add_directive_header(sig)
 -
@@ -2302,53 +1709,20 @@ index 8c3509c3b..45dbd2eed 100644
 -
 -    def annotate_to_first_argument(self, func: Callable, typ: Type) -> None:
 -        """Annotate type hint to the first argument of function if needed."""
-         try:
+-        try:
 -            sig = inspect.signature(func)
 -        except TypeError as exc:
 -            logger.warning(__("Failed to get a method signature for %s: %s"),
 -                           self.fullname, exc)
 -            return
 -        except ValueError:
-+            [mod, _, _, _] = import_object(self.modname, None, 'module')
-+            self.object = mod
-+
-+            # Add module header
-+            self.add_line('')
-+            self.add_line('.. py:module:: %s' % self.modname)
-+            self.add_line('')
-+            self.add_line('')
-+
-+            # Sort and document members
-+            members = get_module_members(mod)
-+            sorted_members = self.sort_members(members)
-+
-+            for name, member in sorted_members:
-+                doc = getdoc(member)
-+                metadata = extract_metadata(doc) if doc else {}
-+                
-+                # Add module function
-+                self.add_line('.. py:function:: %s(name)' % name)
-+                self.add_line('   :module: %s' % self.modname)
-+                self.add_line('')
-+                
-+                # Add docstring without newlines/indentation
-+                if doc:
-+                    self.add_line('   %s' % doc.split('\n')[0])
-+                    self.add_line('')
-+
-+                # Add meta tag
-+                if metadata.get('public'):
-+                    self.add_line('   :meta public:')
-+                elif metadata.get('private'):
-+                    self.add_line('   :meta private:')
-+                self.add_line('')
-+
-+        except ImportError as e:
-+            logger.warning('autodoc: import failed: %s' % e)
++    def generate(self, more_content=None, **kw):
++        if not self.parse_name():
              return
 -        if len(sig.parameters) == 1:
--            return
--
++        if not self.import_object():
+             return
+ 
 -        params = list(sig.parameters.values())
 -        if params[1].annotation is Parameter.empty:
 -            params[1] = params[1].replace(annotation=typ)
@@ -2412,9 +1786,14 @@ index 8c3509c3b..45dbd2eed 100644
 -            return False
 -        except PycodeError:
 -            return False
--
++        self.add_directive_header('')
++        if more_content:
++            self.add_content(more_content)
+ 
 -    def import_object(self, raiseerror: bool = False) -> bool:
--        try:
++    def import_object(self):
++        """Import the module."""
+         try:
 -            ret = super().import_object(raiseerror=True)
 -            if inspect.isenumattribute(self.object):
 -                self.object = self.object.value
@@ -2423,7 +1802,10 @@ index 8c3509c3b..45dbd2eed 100644
 -            else:
 -                # if it's not a data descriptor
 -                self._datadescriptor = False
--        except ImportError as exc:
++            self.module = import_object(self.modname, None)
++            self.object = self.module
++            return True
+         except ImportError as exc:
 -            if self.isinstanceattribute():
 -                self.object = INSTANCEATTR
 -                self._datadescriptor = False
@@ -2629,9 +2011,11 @@ index 8c3509c3b..45dbd2eed 100644
 -        logger.warning(__('autodoc_member_order now accepts "alphabetical" '
 -                          'instead of "alphabetic". Please update your setting.'))
 -        config.autodoc_member_order = 'alphabetical'  # type: ignore
++            logger.warning(str(exc))
++            return False
  
  
- def setup(app: Sphinx) -> Dict[str, Any]:
+-def setup(app: Sphinx) -> Dict[str, Any]:
 -    app.add_autodocumenter(ModuleDocumenter)
 -    app.add_autodocumenter(ClassDocumenter)
 -    app.add_autodocumenter(ExceptionDocumenter)
@@ -2650,12 +2034,7 @@ index 8c3509c3b..45dbd2eed 100644
 -    app.add_config_value('autoclass_content', 'class', True, ENUM('both', 'class', 'init'))
 -    app.add_config_value('autodoc_member_order', 'alphabetical', True,
 -                         ENUM('alphabetic', 'alphabetical', 'bysource', 'groupwise'))
-+    """Setup autodoc extension."""
-+    app.add_autodocumenter(ModuleLevelDocumenter)
-+    
-+    # Add configuration values
-+    app.add_config_value('autodoc_member_order', None, True)
-+    app.add_config_value('autodoc_default_flags', [], True)
++def setup(app):
      app.add_config_value('autodoc_default_options', {}, True)
 -    app.add_config_value('autodoc_docstring_signature', True, True)
 -    app.add_config_value('autodoc_mock_imports', [], True)
@@ -2672,105 +2051,76 @@ index 8c3509c3b..45dbd2eed 100644
 -
 -    app.setup_extension('sphinx.ext.autodoc.type_comment')
 -    app.setup_extension('sphinx.ext.autodoc.typehints')
- 
--    return {'version': sphinx.__display_version__, 'parallel_read_safe': True}
-+    return {
-+        'version': sphinx.__display_version__,
-+        'parallel_read_safe': True
-+    }
-\ No newline at end of file
-diff --git a/sphinx/ext/autodoc/directive.py b/sphinx/ext/autodoc/directive.py
-index 9a3428f5d..7916f4a18 100644
---- a/sphinx/ext/autodoc/directive.py
-+++ b/sphinx/ext/autodoc/directive.py
-@@ -18,7 +18,10 @@ from docutils.utils import Reporter, assemble_option_dict
- from sphinx.config import Config
- from sphinx.deprecation import RemovedInSphinx40Warning
- from sphinx.environment import BuildEnvironment
--from sphinx.ext.autodoc import Documenter, Options
-+from sphinx.ext.autodoc import (
-+    Documenter, ModuleLevelDocumenter, Options,
-+    private_members_option, members_option, bool_option
-+)
- from sphinx.util import logging
- from sphinx.util.docutils import SphinxDirective, switch_source_input
- from sphinx.util.nodes import nested_parse_with_titles
-@@ -27,15 +30,14 @@ if False:
-     # For type annotation
-     from typing import Type  # for python3.5.1
- 
 -
- logger = logging.getLogger(__name__)
- 
- 
- # common option names for autodoc directives
- AUTODOC_DEFAULT_OPTIONS = ['members', 'undoc-members', 'inherited-members',
--                           'show-inheritance', 'private-members', 'special-members',
--                           'ignore-module-all', 'exclude-members', 'member-order',
--                           'imported-members']
-+                         'show-inheritance', 'special-members',
-+                         'ignore-module-all', 'exclude-members', 'member-order',
-+                         'imported-members']
- 
- 
- class DummyOptionSpec(dict):
-@@ -76,7 +78,7 @@ class DocumenterBridge:
- 
- 
- def process_documenter_options(documenter: "Type[Documenter]", config: Config, options: Dict
--                               ) -> Options:
-+                             ) -> Options:
-     """Recognize options of Documenter from user input."""
-     for name in AUTODOC_DEFAULT_OPTIONS:
-         if name not in documenter.option_spec:
-@@ -155,4 +157,4 @@ class AutodocDirective(SphinxDirective):
-             self.state.document.settings.record_dependencies.add(fn)
- 
-         result = parse_generated_content(self.state, params.result, documenter)
--        return result
-+        return result
+-    return {'version': sphinx.__display_version__, 'parallel_read_safe': True}
++    app.add_autodocumenter(ModuleDocumenter)
++    return {'version': sphinx.__display_version__, 'parallel_read_safe': True}
 \ No newline at end of file
-diff --git a/sphinx/ext/autodoc/importer.py b/sphinx/ext/autodoc/importer.py
-index 031911de2..5f44e3254 100644
---- a/sphinx/ext/autodoc/importer.py
-+++ b/sphinx/ext/autodoc/importer.py
-@@ -66,9 +66,12 @@ def import_module(modname: str, warningiserror: bool = False) -> Any:
-         raise ImportError(exc, traceback.format_exc()) from exc
- 
- 
--def import_object(modname: str, objpath: List[str], objtype: str = '',
-+def import_object(modname: str, objpath: Optional[List[str]], objtype: str = '',
-                   attrgetter: Callable[[Any, str], Any] = safe_getattr,
-                   warningiserror: bool = False) -> Any:
-+    if objpath is None:
-+        objpath = []
-+    
-     if objpath:
-         logger.debug('[autodoc] from %s import %s', modname, '.'.join(objpath))
-     else:
-@@ -77,7 +80,6 @@ def import_object(modname: str, objpath: List[str], objtype: str = '',
-     try:
-         module = None
-         exc_on_importing = None
--        objpath = list(objpath)
-         while module is None:
-             try:
-                 module = import_module(modname, warningiserror=warningiserror)
-@@ -154,8 +156,8 @@ def get_module_members(module: Any) -> List[Tuple[str, Any]]:
- 
- 
- Attribute = NamedTuple('Attribute', [('name', str),
--                                     ('directly_defined', bool),
--                                     ('value', Any)])
-+                                    ('directly_defined', bool),
-+                                    ('value', Any)])
- 
- 
- def get_object_members(subject: Any, objpath: List[str], attrgetter: Callable,
-@@ -234,4 +236,4 @@ deprecated_alias('sphinx.ext.autodoc.importer',
-                      'MockFinder': 'sphinx.ext.autodoc.mock.MockFinder',
-                      'MockLoader': 'sphinx.ext.autodoc.mock.MockLoader',
-                      'mock': 'sphinx.ext.autodoc.mock.mock',
--                 })
-+                 })
+diff --git a/sphinx/ext/autodoc/directives.py b/sphinx/ext/autodoc/directives.py
+new file mode 100644
+index 000000000..96ba91f2a
+--- /dev/null
++++ b/sphinx/ext/autodoc/directives.py
+@@ -0,0 +1,61 @@
++"""
++    sphinx.ext.autodoc.directives
++    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++    Directives for sphinx-autodoc.
++
++    :copyright: Copyright 2007-2020 by the Sphinx team, see AUTHORS.
++    :license: BSD, see LICENSE for details.
++"""
++
++from docutils import nodes
++
++from sphinx.ext.autodoc import ALL, Documenter
++from sphinx.ext.autodoc.directive import AutodocDirective, AUTODOC_DEFAULT_OPTIONS
++
++
++class ModuleLevelDocumenter(Documenter):
++    """Specialized Documenter subclass for objects on module level (functions,
++    classes, data/constants).
++    """
++    @property
++    def location(self):
++        # Handles module-level items
++        if self.objpath:
++            return self.modname, self.objpath[0]
++        else:
++            return self.modname, ''
++
++
++class ModuleDocumenter(ModuleLevelDocumenter):
++    """Specialized Documenter subclass for modules."""
++    objtype = 'module'
++    content = True
++    titles_allowed = True
++
++    option_spec = Documenter.option_spec.copy()
++    option_spec.update({
++        'synopsis': str,
++    })
++
++    def __init__(self, directive, name, indent=''):
++        super().__init__(directive, name, indent)
++        self.options['private-members'] = False  # Never show private members for modules
++
++    def parse_name(self):
++        ret = super().parse_name()
++        if ret:
++            modname = self.modname
++            self.modname = self.objpath[0] if self.objpath else None
++            self.objpath = []
++            self.args = None
++            self.retann = None
++            if modname != self.modname:
++                raise ValueError('module name mismatch (got %r, expected %r)' %
++                                (self.modname, modname))
++        return ret
++
++    def add_directive_header(self, sig):
++        sourcename = self.get_sourcename()
++        if not self.options.noindex:
++            self.add_line('.. py:module:: ' + self.modname, sourcename)
 \ No newline at end of file

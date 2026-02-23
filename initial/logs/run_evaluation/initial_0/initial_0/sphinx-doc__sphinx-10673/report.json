@@ -12,11 +12,10 @@
                 ]
             },
             "PASS_TO_PASS": {
-                "success": [
-                    "tests/test_environment_toctree.py::test_process_doc",
-                    "tests/test_environment_toctree.py::test_glob"
-                ],
+                "success": [],
                 "failure": [
+                    "tests/test_environment_toctree.py::test_process_doc",
+                    "tests/test_environment_toctree.py::test_glob",
                     "tests/test_environment_toctree.py::test_get_toc_for",
                     "tests/test_environment_toctree.py::test_get_toc_for_only",
                     "tests/test_environment_toctree.py::test_get_toc_for_tocdepth",

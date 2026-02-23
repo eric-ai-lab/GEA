@@ -6,14 +6,13 @@
         "resolved": false,
         "tests_status": {
             "FAIL_TO_PASS": {
-                "success": [],
-                "failure": [
+                "success": [
                     "test_in_bulk_meta_constraint (lookup.tests.LookupTests)"
-                ]
+                ],
+                "failure": []
             },
             "PASS_TO_PASS": {
-                "success": [],
-                "failure": [
+                "success": [
                     "test_chain_date_time_lookups (lookup.tests.LookupTests)",
                     "test_count (lookup.tests.LookupTests)",
                     "test_custom_field_none_rhs (lookup.tests.LookupTests)",
@@ -30,11 +29,7 @@
                     "test_exists (lookup.tests.LookupTests)",
                     "test_get_next_previous_by (lookup.tests.LookupTests)",
                     "test_in (lookup.tests.LookupTests)",
-                    "test_in_bulk (lookup.tests.LookupTests)",
-                    "test_in_bulk_lots_of_ids (lookup.tests.LookupTests)",
                     "test_in_bulk_non_unique_field (lookup.tests.LookupTests)",
-                    "test_in_bulk_non_unique_meta_constaint (lookup.tests.LookupTests)",
-                    "test_in_bulk_with_field (lookup.tests.LookupTests)",
                     "test_in_different_database (lookup.tests.LookupTests)",
                     "test_in_keeps_value_ordering (lookup.tests.LookupTests)",
                     "test_isnull_non_boolean_value (lookup.tests.LookupTests)",
@@ -55,6 +50,12 @@
                     "test_unsupported_lookups (lookup.tests.LookupTests)",
                     "test_values (lookup.tests.LookupTests)",
                     "test_values_list (lookup.tests.LookupTests)"
+                ],
+                "failure": [
+                    "test_in_bulk (lookup.tests.LookupTests)",
+                    "test_in_bulk_lots_of_ids (lookup.tests.LookupTests)",
+                    "test_in_bulk_non_unique_meta_constaint (lookup.tests.LookupTests)",
+                    "test_in_bulk_with_field (lookup.tests.LookupTests)"
                 ]
             },
             "FAIL_TO_FAIL": {

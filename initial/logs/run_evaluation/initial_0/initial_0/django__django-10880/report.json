@@ -3,7 +3,7 @@
         "patch_is_None": false,
         "patch_exists": true,
         "patch_successfully_applied": true,
-        "resolved": false,
+        "resolved": true,
         "tests_status": {
             "FAIL_TO_PASS": {
                 "success": [
@@ -40,6 +40,7 @@
                     "test_complex_aggregations_require_kwarg (aggregation.tests.AggregateTestCase)",
                     "test_complex_values_aggregation (aggregation.tests.AggregateTestCase)",
                     "test_count (aggregation.tests.AggregateTestCase)",
+                    "test_count_star (aggregation.tests.AggregateTestCase)",
                     "test_dates_with_aggregation (aggregation.tests.AggregateTestCase)",
                     "test_decimal_max_digits_has_no_effect (aggregation.tests.AggregateTestCase)",
                     "test_empty_aggregate (aggregation.tests.AggregateTestCase)",
@@ -68,9 +69,7 @@
                     "test_values_aggregation (aggregation.tests.AggregateTestCase)",
                     "test_values_annotation_with_expression (aggregation.tests.AggregateTestCase)"
                 ],
-                "failure": [
-                    "test_count_star (aggregation.tests.AggregateTestCase)"
-                ]
+                "failure": []
             },
             "FAIL_TO_FAIL": {
                 "success": [],

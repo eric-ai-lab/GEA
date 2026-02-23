@@ -191,16 +191,15 @@ index d517733429..f92088879a 100644
  3. In the event Licensee prepares a derivative work that is based on
 + git diff 58c1acb1d6054dfec29d0f30b1033bae6ef62aec
 diff --git a/django/db/backends/ddl_references.py b/django/db/backends/ddl_references.py
-index 44e49806f8..cf7611e979 100644
+index 44e49806f8..8d3d99ff50 100644
 --- a/django/db/backends/ddl_references.py
 +++ b/django/db/backends/ddl_references.py
-@@ -112,12 +112,19 @@ class IndexColumns(Columns):
+@@ -112,12 +112,18 @@ class IndexColumns(Columns):
          def col_str(column, idx):
              # Index.__init__() guarantees that self.opclasses is the same
              # length as self.columns.
 -            col = '{} {}'.format(self.quote_name(column), self.opclasses[idx])
-+            quoted_col = self.quote_name(column)
-+            parts = [quoted_col]
++            parts = [self.quote_name(column)]
 +            
 +            if self.opclasses[idx]:
 +                parts.append(self.opclasses[idx])
@@ -208,16 +207,16 @@ index 44e49806f8..cf7611e979 100644
              try:
 -                col = '{} {}'.format(col, self.col_suffixes[idx])
 +                if self.col_suffixes[idx]:
-+                    parts.append(self.col_suffixes[idx].strip())
++                    parts.append(self.col_suffixes[idx])
              except IndexError:
                  pass
 -            return col
 +            
-+            return ' '.join(parts)
++            return ' '.join(p for p in parts if p)
  
          return ', '.join(col_str(column, idx) for idx, column in enumerate(self.columns))
  
-@@ -191,4 +198,4 @@ class Statement(Reference):
+@@ -191,4 +197,4 @@ class Statement(Reference):
                  part.rename_column_references(table, old_column, new_column)
  
      def __str__(self):
@@ -350,7 +349,7 @@ export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
 + hash -r
 + python -m pip install -e .
 Obtaining file:///testbed
-Requirement already satisfied: pytz in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (2024.2)
+Requirement already satisfied: pytz in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (2025.2)
 Requirement already satisfied: sqlparse>=0.2.2 in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (0.4.4)
 Requirement already satisfied: asgiref in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.1) (3.4.1)
 Requirement already satisfied: typing-extensions in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from asgiref->Django==3.1) (4.1.1)
@@ -360,8 +359,8 @@ Installing collected packages: Django
     Uninstalling Django-3.1:
       Successfully uninstalled Django-3.1
   Running setup.py develop for Django
-Successfully installed Django-3.1
 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+Successfully installed Django-3.1
 + git checkout 58c1acb1d6054dfec29d0f30b1033bae6ef62aec tests/indexes/tests.py
 Updated 0 paths from 8e8a8ef509
 + git apply -v -
@@ -394,22 +393,7 @@ test_ops_class_partial_tablespace (indexes.tests.SchemaIndexesPostgreSQLTests) .
 test_text_indexes (indexes.tests.SchemaIndexesPostgreSQLTests)
 Test creation of PostgreSQL-specific text indexes (#12234) ... skipped 'PostgreSQL tests'
 test_virtual_relation_indexes (indexes.tests.SchemaIndexesPostgreSQLTests)
-Test indexes are not created for related objects ... skipped 'PostgreSQL tests'
-
-======================================================================
-FAIL: test_descending_columns_list_sql (indexes.tests.SchemaIndexesTests)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/testbed/tests/indexes/tests.py", line 91, in test_descending_columns_list_sql
-    str(index.create_sql(Article, editor)),
-AssertionError: '("headline" DESC)' not found in 'CREATE INDEX "whitespace_idx" ON "indexes_article" ("headline"DESC)'
-
-----------------------------------------------------------------------
-Ran 24 tests in 0.050s
-
-FAILED (failures=1, skipped=12)
-Destroying test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
-Testing against Django installed in '/testbed/django'
+Test indexes are not created for related objects ... Testing against Django installed in '/testbed/django'
 Importing application indexes
 Skipping setup of unused database(s): other.
 Operations to perform:
@@ -434,5 +418,20 @@ Running migrations:
   Applying sites.0001_initial... OK
   Applying sites.0002_alter_domain_unique... OK
 System check identified no issues (0 silenced).
+skipped 'PostgreSQL tests'
+
+======================================================================
+FAIL: test_descending_columns_list_sql (indexes.tests.SchemaIndexesTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/testbed/tests/indexes/tests.py", line 91, in test_descending_columns_list_sql
+    str(index.create_sql(Article, editor)),
+AssertionError: '("headline" DESC)' not found in 'CREATE INDEX "whitespace_idx" ON "indexes_article" ("headline"DESC)'
+
+----------------------------------------------------------------------
+Ran 24 tests in 0.061s
+
+FAILED (failures=1, skipped=12)
+Destroying test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
 + git checkout 58c1acb1d6054dfec29d0f30b1033bae6ef62aec tests/indexes/tests.py
 Updated 1 path from 8e8a8ef509

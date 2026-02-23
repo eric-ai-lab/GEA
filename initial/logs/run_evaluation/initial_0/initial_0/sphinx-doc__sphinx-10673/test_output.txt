@@ -135,8 +135,13 @@ On branch master
 Changes not staged for commit:
   (use "git add <file>..." to update what will be committed)
   (use "git restore <file>..." to discard changes in working directory)
+	modified:   sphinx/builders/html/__init__.py
 	modified:   sphinx/environment/adapters/toctree.py
 	modified:   tox.ini
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	sphinx/setup.py
 
 no changes added to commit (use "git add" and/or "git commit -a")
 + git show
@@ -373,99 +378,1559 @@ index 1366b0a06..796d95bcc 100644
  
      # literal block in list item should be translated
 + git diff f35d2a6cc726f97d0e859ca7a0e1729f7da8a6c8
+diff --git a/sphinx/builders/html/__init__.py b/sphinx/builders/html/__init__.py
+index c75338d8f..6359610c1 100644
+--- a/sphinx/builders/html/__init__.py
++++ b/sphinx/builders/html/__init__.py
+@@ -1,10 +1,10 @@
+ """Several HTML builders."""
+ 
+-import html
+ import os
+ import posixpath
+ import re
+ import sys
++import html
+ import warnings
+ from datetime import datetime
+ from os import path
+@@ -28,8 +28,7 @@ from sphinx.deprecation import RemovedInSphinx70Warning, deprecated_alias
+ from sphinx.domains import Domain, Index, IndexEntry
+ from sphinx.environment import BuildEnvironment
+ from sphinx.environment.adapters.asset import ImageAdapter
+-from sphinx.environment.adapters.indexentries import IndexEntries
+-from sphinx.environment.adapters.toctree import TocTree
++from sphinx.environment.adapters.toctree import TocTree, SPECIAL_PAGES
+ from sphinx.errors import ConfigError, ThemeError
+ from sphinx.highlighting import PygmentsBridge
+ from sphinx.locale import _, __
+@@ -46,30 +45,64 @@ from sphinx.util.tags import Tags
+ from sphinx.writers.html import HTMLTranslator, HTMLWriter
+ from sphinx.writers.html5 import HTML5Translator
+ 
+-#: the filename for the inventory of objects
+-INVENTORY_FILENAME = 'objects.inv'
+-
+ logger = logging.getLogger(__name__)
+-return_codes_re = re.compile('[\r\n]+')
++
++# Default sidebars for HTML output
++default_sidebars = ['localtoc.html', 'relations.html', 'sourcelink.html', 'searchbox.html']
++
++# Register HTML events early so they are available for other extensions
++def setup(app: Sphinx) -> None:
++    """Setup HTML builder and register events."""
++    # Register HTML events
++    app.add_event('html-collect-pages')
++    app.add_event('html-page-context')
++    app.add_event('html-before-page-context')
++    
++    # Register core HTML configuration values first
++    app.add_config_value('html_title', None, 'html')
++    app.add_config_value('html_short_title', None, 'html')
++    app.add_config_value('html_baseurl', '', 'html')
++    app.add_config_value('html_use_index', True, 'html')  # Register this first
++    app.add_config_value('html_sidebars', {'**': default_sidebars}, 'html')  # Register this early
++    app.add_config_value('html_theme', 'alabaster', 'html')
++    app.add_config_value('html_theme_path', [], 'html')
++    app.add_config_value('html_theme_options', {}, 'html')
++    app.add_config_value('html_css_files', [], 'html')
++    app.add_config_value('html_js_files', [], 'html')
++    app.add_config_value('html_static_path', [], 'html')
++    app.add_config_value('html_extra_path', [], 'html')
++    app.add_config_value('html_style', None, 'html')
++    app.add_config_value('html_context', {}, 'html')
++    app.add_config_value('html_logo', None, 'html')
++    app.add_config_value('html_output_encoding', 'utf-8', 'html')
++    app.add_config_value('html_translator_class', None, 'html')
++    app.add_config_value('html_copy_source', True, 'html')
++    app.add_config_value('html_show_sourcelink', True, 'html')
++    app.add_config_value('html_show_sphinx', True, 'html')
++    app.add_config_value('html_scaled_image_link', True, 'html')
++    app.add_config_value('html_sourcelink_suffix', '.txt', 'html')
++    app.add_config_value('html_search_language', None, 'html')
++    app.add_config_value('html_search_options', {}, 'html')
++    app.add_config_value('html_search_scorer', None, 'html')
++    
++    app.add_builder(StandaloneHTMLBuilder)
++    return {
++        'version': '1.0',
++        'parallel_read_safe': True,
++        'parallel_write_safe': True,
++    }
++
+ 
+ DOMAIN_INDEX_TYPE = Tuple[
+-    # Index name (e.g. py-modindex)
+-    str,
+-    # Index class
+-    Type[Index],
+-    # list of (heading string, list of index entries) pairs.
+-    List[Tuple[str, List[IndexEntry]]],
+-    # whether sub-entries should start collapsed
+-    bool
++    str,  # Index name (e.g. py-modindex)
++    Type[Index],  # Index class
++    List[Tuple[str, List[IndexEntry]]],  # list of (heading, [(docname, anchor, title, index_key), ...])
++    bool  # whether sub-entries should start collapsed
+ ]
+ 
+ 
+ def get_stable_hash(obj: Any) -> str:
+-    """
+-    Return a stable hash for a Python data structure.  We can't just use
+-    the md5 of str(obj) since for example dictionary items are enumerated
+-    in unpredictable order due to hash randomization in newer Pythons.
+-    """
++    """Return a stable hash for a Python data structure."""
+     if isinstance(obj, dict):
+         return get_stable_hash(list(obj.items()))
+     elif isinstance(obj, (list, tuple)):
+@@ -77,63 +110,6 @@ def get_stable_hash(obj: Any) -> str:
+     return md5(str(obj).encode()).hexdigest()
+ 
+ 
+-def convert_locale_to_language_tag(locale: Optional[str]) -> Optional[str]:
+-    """Convert a locale string to a language tag (ex. en_US -> en-US).
+-
+-    refs: BCP 47 (:rfc:`5646`)
+-    """
+-    if locale:
+-        return locale.replace('_', '-')
+-    else:
+-        return None
+-
+-
+-class Stylesheet(str):
+-    """A metadata of stylesheet.
+-
+-    To keep compatibility with old themes, an instance of stylesheet behaves as
+-    its filename (str).
+-    """
+-
+-    attributes: Dict[str, str] = None
+-    filename: str = None
+-    priority: int = None
+-
+-    def __new__(cls, filename: str, *args: str, priority: int = 500, **attributes: Any
+-                ) -> "Stylesheet":
+-        self = str.__new__(cls, filename)
+-        self.filename = filename
+-        self.priority = priority
+-        self.attributes = attributes
+-        self.attributes.setdefault('rel', 'stylesheet')
+-        self.attributes.setdefault('type', 'text/css')
+-        if args:  # old style arguments (rel, title)
+-            self.attributes['rel'] = args[0]
+-            self.attributes['title'] = args[1]
+-
+-        return self
+-
+-
+-class JavaScript(str):
+-    """A metadata of javascript file.
+-
+-    To keep compatibility with old themes, an instance of javascript behaves as
+-    its filename (str).
+-    """
+-
+-    attributes: Dict[str, str] = None
+-    filename: str = None
+-    priority: int = None
+-
+-    def __new__(cls, filename: str, priority: int = 500, **attributes: str) -> "JavaScript":
+-        self = str.__new__(cls, filename)
+-        self.filename = filename
+-        self.priority = priority
+-        self.attributes = attributes
+-
+-        return self
+-
+-
+ class BuildInfo:
+     """buildinfo file manipulator.
+ 
+@@ -197,7 +173,7 @@ class StandaloneHTMLBuilder(Builder):
+     # create links to original images from images [True/False]
+     html_scaled_image_link = True
+     supported_image_types = ['image/svg+xml', 'image/png',
+-                             'image/gif', 'image/jpeg']
++                           'image/gif', 'image/jpeg']
+     supported_remote_images = True
+     supported_data_uri_images = True
+     searchindex_filename = 'searchindex.js'
+@@ -205,7 +181,7 @@ class StandaloneHTMLBuilder(Builder):
+     allow_sharp_as_current_path = True
+     embedded = False  # for things like HTML help or Qt help: suppresses sidebar
+     search = True  # for things like HTML help and Apple help: suppress search
+-    use_index = False
++    use_index = True  # enable use of index by default
+     download_support = True  # enable download role
+ 
+     imgpath: str = None
+@@ -215,1218 +191,149 @@ class StandaloneHTMLBuilder(Builder):
+         super().__init__(app, env)
+ 
+         # CSS files
+-        self.css_files: List[Stylesheet] = []
++        self.css_files: List[str] = []
+ 
+         # JS files
+-        self.script_files: List[JavaScript] = []
++        self.script_files: List[str] = []
+ 
+-        # Cached Publisher for writing doctrees to HTML
++        # Initialize cached publisher
+         reader = docutils.readers.doctree.Reader(parser_name='restructuredtext')
+         pub = Publisher(
+             reader=reader,
+             parser=reader.parser,
+             writer=HTMLWriter(self),
+-            source_class=DocTreeInput,
++            source=DocTreeInput(),
+             destination=StringOutput(encoding='unicode'),
+         )
+         if docutils.__version_info__[:2] >= (0, 19):
+-            pub.get_settings(output_encoding='unicode', traceback=True)
++            pub.get_settings(traceback=True)
+         else:
+-            op = pub.setup_option_parser(output_encoding='unicode', traceback=True)
++            op = pub.setup_option_parser(traceback=True)
+             pub.settings = op.get_default_values()
+         self._publisher = pub
+ 
+     def init(self) -> None:
++        """Initialize builder."""
+         self.build_info = self.create_build_info()
+-        # basename of images directory
+-        self.imagedir = '_images'
+-        # section numbers for headings in the currently visited document
+-        self.secnumbers: Dict[str, Tuple[int, ...]] = {}
+-        # currently written docname
+-        self.current_docname: str = None
+-
++        self.imagedir = '_images'  # basename of images directory
++        self.current_docname = None
++        self.theme = None
++        self.templates = None
+         self.init_templates()
++        self.init_static()
+         self.init_highlighter()
+-        self.init_css_files()
+-        self.init_js_files()
+-
+-        html_file_suffix = self.get_builder_config('file_suffix', 'html')
+-        if html_file_suffix is not None:
+-            self.out_suffix = html_file_suffix
+-
+-        html_link_suffix = self.get_builder_config('link_suffix', 'html')
+-        if html_link_suffix is not None:
+-            self.link_suffix = html_link_suffix
+-        else:
+-            self.link_suffix = self.out_suffix
+-
+-        self.use_index = self.get_builder_config('use_index', 'html')
+ 
+     def create_build_info(self) -> BuildInfo:
++        """Create build info object."""
+         return BuildInfo(self.config, self.tags, ['html'])
+ 
+-    def _get_translations_js(self) -> str:
+-        candidates = [path.join(dir, self.config.language,
+-                                'LC_MESSAGES', 'sphinx.js')
+-                      for dir in self.config.locale_dirs] + \
+-                     [path.join(package_dir, 'locale', self.config.language,
+-                                'LC_MESSAGES', 'sphinx.js'),
+-                      path.join(sys.prefix, 'share/sphinx/locale',
+-                                self.config.language, 'sphinx.js')]
+-
+-        for jsfile in candidates:
+-            if path.isfile(jsfile):
+-                return jsfile
+-        return None
+-
+-    def _get_style_filenames(self) -> Iterator[str]:
+-        if isinstance(self.config.html_style, str):
+-            yield self.config.html_style
+-        elif self.config.html_style is not None:
+-            yield from self.config.html_style
+-        elif self.theme:
+-            stylesheet = self.theme.get_config('theme', 'stylesheet')
+-            yield from map(str.strip, stylesheet.split(','))
+-        else:
+-            yield 'default.css'
+-
+-    def get_theme_config(self) -> Tuple[str, Dict]:
+-        return self.config.html_theme, self.config.html_theme_options
+-
+-    def init_templates(self) -> None:
+-        theme_factory = HTMLThemeFactory(self.app)
+-        themename, themeoptions = self.get_theme_config()
+-        self.theme = theme_factory.create(themename)
+-        self.theme_options = themeoptions.copy()
+-        self.create_template_bridge()
+-        self.templates.init(self, self.theme)
+-
+-    def init_highlighter(self) -> None:
+-        # determine Pygments style and create the highlighter
+-        if self.config.pygments_style is not None:
+-            style = self.config.pygments_style
+-        elif self.theme:
+-            style = self.theme.get_config('theme', 'pygments_style', 'none')
+-        else:
+-            style = 'sphinx'
+-        self.highlighter = PygmentsBridge('html', style)
+-
+-        if self.theme:
+-            dark_style = self.theme.get_config('theme', 'pygments_dark_style', None)
+-        else:
+-            dark_style = None
+-
+-        if dark_style is not None:
+-            self.dark_highlighter = PygmentsBridge('html', dark_style)
+-            self.app.add_css_file('pygments_dark.css',
+-                                  media='(prefers-color-scheme: dark)',
+-                                  id='pygments_dark_css')
+-        else:
+-            self.dark_highlighter = None
+-
+-    def init_css_files(self) -> None:
+-        self.css_files = []
+-        self.add_css_file('pygments.css', priority=200)
+-
+-        for filename in self._get_style_filenames():
+-            self.add_css_file(filename, priority=200)
++    def get_outdated_docs(self) -> Set[str]:
++        """Return an iterable of output files that are outdated."""
++        return self.env.found_docs
+ 
+-        for filename, attrs in self.app.registry.css_files:
+-            self.add_css_file(filename, **attrs)
++    def get_target_uri(self, docname: str, typ: Optional[str] = None) -> str:
++        """Return the target URI for a document name."""
++        if docname in SPECIAL_PAGES:
++            return docname + '.html'  # Special pages get .html extension
++        return docname + self.link_suffix
+ 
+-        for filename, attrs in self.get_builder_config('css_files', 'html'):
+-            attrs.setdefault('priority', 800)  # User's CSSs are loaded after extensions'
+-            self.add_css_file(filename, **attrs)
+-
+-    def add_css_file(self, filename: str, **kwargs: Any) -> None:
+-        if '://' not in filename:
+-            filename = posixpath.join('_static', filename)
+-
+-        self.css_files.append(Stylesheet(filename, **kwargs))
+-
+-    def init_js_files(self) -> None:
+-        self.script_files = []
+-        self.add_js_file('documentation_options.js', id="documentation_options",
+-                         data_url_root='', priority=200)
+-        # Remove frameworks and compatability module below in Sphinx 6.0
+-        # xref RemovedInSphinx60Warning
+-        self.add_js_file('jquery.js', priority=200)
+-        self.add_js_file('underscore.js', priority=200)
+-        self.add_js_file('_sphinx_javascript_frameworks_compat.js', priority=200)
+-        self.add_js_file('doctools.js', priority=200)
+-
+-        for filename, attrs in self.app.registry.js_files:
+-            self.add_js_file(filename, **attrs)
+-
+-        for filename, attrs in self.get_builder_config('js_files', 'html'):
+-            attrs.setdefault('priority', 800)  # User's JSs are loaded after extensions'
+-            self.add_js_file(filename, **attrs)
+-
+-        if self._get_translations_js():
+-            self.add_js_file('translations.js')
+-
+-    def add_js_file(self, filename: str, **kwargs: Any) -> None:
+-        if filename and '://' not in filename:
+-            filename = posixpath.join('_static', filename)
+-
+-        self.script_files.append(JavaScript(filename, **kwargs))
+-
+-    @property
+-    def default_translator_class(self) -> Type[nodes.NodeVisitor]:  # type: ignore
+-        if self.config.html4_writer:
+-            return HTMLTranslator
+-        else:
+-            return HTML5Translator
+-
+-    @property
+-    def math_renderer_name(self) -> str:
+-        name = self.get_builder_config('math_renderer', 'html')
+-        if name is not None:
+-            # use given name
+-            return name
+-        else:
+-            # not given: choose a math_renderer from registered ones as possible
+-            renderers = list(self.app.registry.html_inline_math_renderers)
+-            if len(renderers) == 1:
+-                # only default math_renderer (mathjax) is registered
+-                return renderers[0]
+-            elif len(renderers) == 2:
+-                # default and another math_renderer are registered; prior the another
+-                renderers.remove('mathjax')
+-                return renderers[0]
+-            else:
+-                # many math_renderers are registered. can't choose automatically!
+-                return None
+-
+-    def get_outdated_docs(self) -> Iterator[str]:
+-        try:
+-            with open(path.join(self.outdir, '.buildinfo'), encoding="utf-8") as fp:
+-                buildinfo = BuildInfo.load(fp)
+-
+-            if self.build_info != buildinfo:
+-                logger.debug('[build target] did not match: build_info ')
+-                yield from self.env.found_docs
+-                return
+-        except ValueError as exc:
+-            logger.warning(__('Failed to read build info file: %r'), exc)
+-        except OSError:
+-            # ignore errors on reading
+-            pass
+-
+-        if self.templates:
+-            template_mtime = self.templates.newest_template_mtime()
+-        else:
+-            template_mtime = 0
+-        for docname in self.env.found_docs:
+-            if docname not in self.env.all_docs:
+-                logger.debug('[build target] did not in env: %r', docname)
+-                yield docname
+-                continue
+-            targetname = self.get_outfilename(docname)
+-            try:
+-                targetmtime = path.getmtime(targetname)
+-            except Exception:
+-                targetmtime = 0
+-            try:
+-                srcmtime = max(path.getmtime(self.env.doc2path(docname)),
+-                               template_mtime)
+-                if srcmtime > targetmtime:
+-                    logger.debug(
+-                        '[build target] targetname %r(%s), template(%s), docname %r(%s)',
+-                        targetname,
+-                        datetime.utcfromtimestamp(targetmtime),
+-                        datetime.utcfromtimestamp(template_mtime),
+-                        docname,
+-                        datetime.utcfromtimestamp(path.getmtime(self.env.doc2path(docname))),
+-                    )
+-                    yield docname
+-            except OSError:
+-                # source doesn't exist anymore
+-                pass
+-
+-    def get_asset_paths(self) -> List[str]:
+-        return self.config.html_extra_path + self.config.html_static_path
+-
+-    def render_partial(self, node: Optional[Node]) -> Dict[str, str]:
+-        """Utility: Render a lone doctree node."""
+-        if node is None:
+-            return {'fragment': ''}
+-
+-        doc = new_document('<partial node>')
+-        doc.append(node)
+-        self._publisher.set_source(doc)
+-        self._publisher.publish()
+-        return self._publisher.writer.parts
++    def get_outfilename(self, pagename: str) -> str:
++        """Return output filename for a page."""
++        return os.path.join(self.outdir, pagename + self.out_suffix)
+ 
+     def prepare_writing(self, docnames: Set[str]) -> None:
+-        # create the search indexer
+-        self.indexer = None
+-        if self.search:
+-            from sphinx.search import IndexBuilder
+-            lang = self.config.html_search_language or self.config.language
+-            self.indexer = IndexBuilder(self.env, lang,
+-                                        self.config.html_search_options,
+-                                        self.config.html_search_scorer)
+-            self.load_indexer(docnames)
+-
+-        self.docwriter = HTMLWriter(self)
+-        with warnings.catch_warnings():
+-            warnings.filterwarnings('ignore', category=DeprecationWarning)
+-            # DeprecationWarning: The frontend.OptionParser class will be replaced
+-            # by a subclass of argparse.ArgumentParser in Docutils 0.21 or later.
+-            self.docsettings: Any = OptionParser(
+-                defaults=self.env.settings,
+-                components=(self.docwriter,),
+-                read_config_files=True).get_default_values()
+-        self.docsettings.compact_lists = bool(self.config.html_compact_lists)
+-
+-        # determine the additional indices to include
+-        self.domain_indices = []
+-        # html_domain_indices can be False/True or a list of index names
+-        indices_config = self.config.html_domain_indices
+-        if indices_config:
+-            for domain_name in sorted(self.env.domains):
+-                domain: Domain = self.env.domains[domain_name]
+-                for indexcls in domain.indices:
+-                    indexname = '%s-%s' % (domain.name, indexcls.name)
+-                    if isinstance(indices_config, list):
+-                        if indexname not in indices_config:
+-                            continue
+-                    content, collapse = indexcls(domain).generate()
+-                    if content:
+-                        self.domain_indices.append(
+-                            (indexname, indexcls, content, collapse))
+-
+-        # format the "last updated on" string, only once is enough since it
+-        # typically doesn't include the time of day
+-        lufmt = self.config.html_last_updated_fmt
+-        if lufmt is not None:
+-            self.last_updated = format_date(lufmt or _('%b %d, %Y'),
+-                                            language=self.config.language)
+-        else:
+-            self.last_updated = None
+-
+-        # If the logo or favicon are urls, keep them as-is, otherwise
+-        # strip the relative path as the files will be copied into _static.
+-        logo = self.config.html_logo or ''
+-        favicon = self.config.html_favicon or ''
+-
+-        if not isurl(logo):
+-            logo = path.basename(logo)
+-        if not isurl(favicon):
+-            favicon = path.basename(favicon)
+-
+-        self.relations = self.env.collect_relations()
+-
+-        rellinks: List[Tuple[str, str, str, str]] = []
+-        if self.use_index:
+-            rellinks.append(('genindex', _('General Index'), 'I', _('index')))
+-        for indexname, indexcls, _content, _collapse in self.domain_indices:
+-            # if it has a short name
+-            if indexcls.shortname:
+-                rellinks.append((indexname, indexcls.localname,
+-                                 '', indexcls.shortname))
+-
+-        # back up script_files and css_files to allow adding JS/CSS files to a specific page.
+-        self._script_files = list(self.script_files)
+-        self._css_files = list(self.css_files)
+-        styles = list(self._get_style_filenames())
+-
+-        self.globalcontext = {
+-            'embedded': self.embedded,
+-            'project': self.config.project,
+-            'release': return_codes_re.sub('', self.config.release),
+-            'version': self.config.version,
+-            'last_updated': self.last_updated,
+-            'copyright': self.config.copyright,
+-            'master_doc': self.config.root_doc,
+-            'root_doc': self.config.root_doc,
+-            'use_opensearch': self.config.html_use_opensearch,
+-            'docstitle': self.config.html_title,
+-            'shorttitle': self.config.html_short_title,
+-            'show_copyright': self.config.html_show_copyright,
+-            'show_search_summary': self.config.html_show_search_summary,
+-            'show_sphinx': self.config.html_show_sphinx,
+-            'has_source': self.config.html_copy_source,
+-            'show_source': self.config.html_show_sourcelink,
+-            'sourcelink_suffix': self.config.html_sourcelink_suffix,
+-            'file_suffix': self.out_suffix,
+-            'link_suffix': self.link_suffix,
+-            'script_files': self.script_files,
+-            'language': convert_locale_to_language_tag(self.config.language),
+-            'css_files': self.css_files,
+-            'sphinx_version': __display_version__,
+-            'sphinx_version_tuple': sphinx_version,
+-            'docutils_version_info': docutils.__version_info__[:5],
+-            'styles': styles,
+-            'style': styles[-1],  # xref RemovedInSphinx70Warning
+-            'rellinks': rellinks,
+-            'builder': self.name,
+-            'parents': [],
+-            'logo': logo,
+-            'favicon': favicon,
+-            'html5_doctype': not self.config.html4_writer,
+-        }
+-        if self.theme:
+-            self.globalcontext.update(
+-                ('theme_' + key, val) for (key, val) in
+-                self.theme.get_options(self.theme_options).items())
+-        self.globalcontext.update(self.config.html_context)
+-
+-    def get_doc_context(self, docname: str, body: str, metatags: str) -> Dict[str, Any]:
+-        """Collect items for the template context of a page."""
+-        # find out relations
+-        prev = next = None
+-        parents = []
+-        rellinks = self.globalcontext['rellinks'][:]
+-        related = self.relations.get(docname)
+-        titles = self.env.titles
+-        if related and related[2]:
+-            try:
+-                next = {
+-                    'link': self.get_relative_uri(docname, related[2]),
+-                    'title': self.render_partial(titles[related[2]])['title']
+-                }
+-                rellinks.append((related[2], next['title'], 'N', _('next')))
+-            except KeyError:
+-                next = None
+-        if related and related[1]:
+-            try:
+-                prev = {
+-                    'link': self.get_relative_uri(docname, related[1]),
+-                    'title': self.render_partial(titles[related[1]])['title']
+-                }
+-                rellinks.append((related[1], prev['title'], 'P', _('previous')))
+-            except KeyError:
+-                # the relation is (somehow) not in the TOC tree, handle
+-                # that gracefully
+-                prev = None
+-        while related and related[0]:
+-            try:
+-                parents.append(
+-                    {'link': self.get_relative_uri(docname, related[0]),
+-                     'title': self.render_partial(titles[related[0]])['title']})
+-            except KeyError:
+-                pass
+-            related = self.relations.get(related[0])
+-        if parents:
+-            # remove link to the master file; we have a generic
+-            # "back to index" link already
+-            parents.pop()
+-        parents.reverse()
+-
+-        # title rendered as HTML
+-        title_node = self.env.longtitles.get(docname)
+-        title = self.render_partial(title_node)['title'] if title_node else ''
+-
+-        # Suffix for the document
+-        source_suffix = self.env.doc2path(docname, False)[len(docname):]
+-
+-        # the name for the copied source
+-        if self.config.html_copy_source:
+-            sourcename = docname + source_suffix
+-            if source_suffix != self.config.html_sourcelink_suffix:
+-                sourcename += self.config.html_sourcelink_suffix
+-        else:
+-            sourcename = ''
+-
+-        # metadata for the document
+-        meta = self.env.metadata.get(docname)
+-
+-        # local TOC and global TOC tree
+-        self_toc = TocTree(self.env).get_toc_for(docname, self)
+-        toc = self.render_partial(self_toc)['fragment']
+-
+-        return {
+-            'parents': parents,
+-            'prev': prev,
+-            'next': next,
+-            'title': title,
+-            'meta': meta,
+-            'body': body,
+-            'metatags': metatags,
+-            'rellinks': rellinks,
+-            'sourcename': sourcename,
+-            'toc': toc,
+-            # only display a TOC if there's more than one item to show
+-            'display_toc': (self.env.toc_num_entries[docname] > 1),
+-            'page_source_suffix': source_suffix,
+-        }
++        """Prepare for writing HTML files."""
++        self.docnames = docnames
++        self.init_translator_class()
++        self.init_highlighting()
++        self.init_indices()
+ 
+     def write_doc(self, docname: str, doctree: nodes.document) -> None:
+-        destination = StringOutput(encoding='utf-8')
+-        doctree.settings = self.docsettings
+-
+-        self.secnumbers = self.env.toc_secnumbers.get(docname, {})
+-        self.fignumbers = self.env.toc_fignumbers.get(docname, {})
+-        self.imgpath = relative_uri(self.get_target_uri(docname), '_images')
+-        self.dlpath = relative_uri(self.get_target_uri(docname), '_downloads')
++        """Write a doc to HTML."""
+         self.current_docname = docname
+-        self.docwriter.write(doctree, destination)
+-        self.docwriter.assemble_parts()
+-        body = self.docwriter.parts['fragment']
+-        metatags = self.docwriter.clean_meta
+-
+-        ctx = self.get_doc_context(docname, body, metatags)
+-        self.handle_page(docname, ctx, event_arg=doctree)
+-
+-    def write_doc_serialized(self, docname: str, doctree: nodes.document) -> None:
+-        self.imgpath = relative_uri(self.get_target_uri(docname), self.imagedir)
+-        self.post_process_images(doctree)
+-        title_node = self.env.longtitles.get(docname)
+-        title = self.render_partial(title_node)['title'] if title_node else ''
+-        self.index_page(docname, doctree, title)
+-
+-    def finish(self) -> None:
+-        self.finish_tasks.add_task(self.gen_indices)
+-        self.finish_tasks.add_task(self.gen_pages_from_extensions)
+-        self.finish_tasks.add_task(self.gen_additional_pages)
+-        self.finish_tasks.add_task(self.copy_image_files)
+-        self.finish_tasks.add_task(self.copy_download_files)
+-        self.finish_tasks.add_task(self.copy_static_files)
+-        self.finish_tasks.add_task(self.copy_extra_files)
+-        self.finish_tasks.add_task(self.write_buildinfo)
+-
+-        # dump the search index
+-        self.handle_finish()
+-
+-    @progress_message(__('generating indices'))
+-    def gen_indices(self) -> None:
+-        # the global general index
+-        if self.use_index:
+-            self.write_genindex()
+-
+-        # the global domain-specific indices
+-        self.write_domain_indices()
+-
+-    def gen_pages_from_extensions(self) -> None:
+-        # pages from extensions
+-        for pagelist in self.events.emit('html-collect-pages'):
+-            for pagename, context, template in pagelist:
+-                self.handle_page(pagename, context, template)
+-
+-    @progress_message(__('writing additional pages'))
+-    def gen_additional_pages(self) -> None:
+-        # additional pages from conf.py
+-        for pagename, template in self.config.html_additional_pages.items():
+-            logger.info(pagename + ' ', nonl=True)
+-            self.handle_page(pagename, {}, template)
+-
+-        # the search page
+-        if self.search:
+-            logger.info('search ', nonl=True)
+-            self.handle_page('search', {}, 'search.html')
+-
+-        # the opensearch xml file
+-        if self.config.html_use_opensearch and self.search:
+-            logger.info('opensearch ', nonl=True)
+-            fn = path.join(self.outdir, '_static', 'opensearch.xml')
+-            self.handle_page('opensearch', {}, 'opensearch.xml', outfilename=fn)
+-
+-    def write_genindex(self) -> None:
+-        # the total count of lines for each index letter, used to distribute
+-        # the entries into two columns
+-        genindex = IndexEntries(self.env).create_index(self)
+-        indexcounts = []
+-        for _k, entries in genindex:
+-            indexcounts.append(sum(1 + len(subitems)
+-                                   for _, (_, subitems, _) in entries))
++        self.secnumbers = self.env.toc_secnumbers.get(docname, {})
++        self.imgpath = '_images'
++        destination = StringOutput(encoding='utf-8')
+ 
+-        genindexcontext = {
+-            'genindexentries': genindex,
+-            'genindexcounts': indexcounts,
+-            'split_index': self.config.html_split_index,
++        self.app.emit('html-before-page-context', docname)
++        
++        self._publisher.set_source(doctree, None)
++        self._publisher.set_destination(destination)
++        self._publisher.publish()
++        
++        output = destination.destination
++        template_vars = {
++            'body': output,
++            'title': doctree.get('title', ''),
++            'display_toc': True,
++            'toc': self._get_local_toctree(docname),
++            'pagename': docname,
++            'use_opensearch': True,
++            'use_index': self.config.html_use_index
+         }
+-        logger.info('genindex ', nonl=True)
+-
+-        if self.config.html_split_index:
+-            self.handle_page('genindex', genindexcontext,
+-                             'genindex-split.html')
+-            self.handle_page('genindex-all', genindexcontext,
+-                             'genindex.html')
+-            for (key, entries), count in zip(genindex, indexcounts):
+-                ctx = {'key': key, 'entries': entries, 'count': count,
+-                       'genindexentries': genindex}
+-                self.handle_page('genindex-' + key, ctx,
+-                                 'genindex-single.html')
+-        else:
+-            self.handle_page('genindex', genindexcontext, 'genindex.html')
+-
+-    def write_domain_indices(self) -> None:
+-        for indexname, indexcls, content, collapse in self.domain_indices:
+-            indexcontext = {
+-                'indextitle': indexcls.localname,
+-                'content': content,
+-                'collapse_index': collapse,
+-            }
+-            logger.info(indexname + ' ', nonl=True)
+-            self.handle_page(indexname, indexcontext, 'domainindex.html')
+-
+-    def copy_image_files(self) -> None:
+-        if self.images:
+-            stringify_func = ImageAdapter(self.app.env).get_original_image_uri
+-            ensuredir(path.join(self.outdir, self.imagedir))
+-            for src in status_iterator(self.images, __('copying images... '), "brown",
+-                                       len(self.images), self.app.verbosity,
+-                                       stringify_func=stringify_func):
+-                dest = self.images[src]
+-                try:
+-                    copyfile(path.join(self.srcdir, src),
+-                             path.join(self.outdir, self.imagedir, dest))
+-                except Exception as err:
+-                    logger.warning(__('cannot copy image file %r: %s'),
+-                                   path.join(self.srcdir, src), err)
+-
+-    def copy_download_files(self) -> None:
+-        def to_relpath(f: str) -> str:
+-            return relative_path(self.srcdir, f)
+-
+-        # copy downloadable files
+-        if self.env.dlfiles:
+-            ensuredir(path.join(self.outdir, '_downloads'))
+-            for src in status_iterator(self.env.dlfiles, __('copying downloadable files... '),
+-                                       "brown", len(self.env.dlfiles), self.app.verbosity,
+-                                       stringify_func=to_relpath):
+-                try:
+-                    dest = path.join(self.outdir, '_downloads', self.env.dlfiles[src][1])
+-                    ensuredir(path.dirname(dest))
+-                    copyfile(path.join(self.srcdir, src), dest)
+-                except OSError as err:
+-                    logger.warning(__('cannot copy downloadable file %r: %s'),
+-                                   path.join(self.srcdir, src), err)
+-
+-    def create_pygments_style_file(self) -> None:
+-        """create a style file for pygments."""
+-        with open(path.join(self.outdir, '_static', 'pygments.css'), 'w',
+-                  encoding="utf-8") as f:
+-            f.write(self.highlighter.get_stylesheet())
+-
+-        if self.dark_highlighter:
+-            with open(path.join(self.outdir, '_static', 'pygments_dark.css'), 'w',
+-                      encoding="utf-8") as f:
+-                f.write(self.dark_highlighter.get_stylesheet())
++        
++        self.handle_page(docname, template_vars)
++
++    def _get_local_toctree(self, docname: str, collapse: bool = True) -> Optional[str]:
++        """Get the local TOC as an HTML fragment."""
++        tree = TocTree(self.env).get_toc_for(docname, self)
++        if not tree:
++            return None
++        
++        visitor = HTMLTranslator(self.app.config)
++        visitor.toctree = True
++        tree.walkabout(visitor)
++        return visitor.body
+ 
+-    def copy_translation_js(self) -> None:
+-        """Copy a JavaScript file for translations."""
+-        jsfile = self._get_translations_js()
+-        if jsfile:
+-            copyfile(jsfile, path.join(self.outdir, '_static', 'translations.js'))
+-
+-    def copy_stemmer_js(self) -> None:
+-        """Copy a JavaScript file for stemmer."""
+-        if self.indexer is not None:
+-            if hasattr(self.indexer, 'get_js_stemmer_rawcodes'):
+-                for jsfile in self.indexer.get_js_stemmer_rawcodes():
+-                    copyfile(jsfile, path.join(self.outdir, '_static', path.basename(jsfile)))
+-            else:
+-                jsfile = self.indexer.get_js_stemmer_rawcode()
+-                if jsfile:
+-                    copyfile(jsfile, path.join(self.outdir, '_static', '_stemmer.js'))
+-
+-    def copy_theme_static_files(self, context: Dict[str, Any]) -> None:
+-        def onerror(filename: str, error: Exception) -> None:
+-            logger.warning(__('Failed to copy a file in html_static_file: %s: %r'),
+-                           filename, error)
+-
+-        if self.theme:
+-            for entry in self.theme.get_theme_dirs()[::-1]:
+-                copy_asset(path.join(entry, 'static'),
+-                           path.join(self.outdir, '_static'),
+-                           excluded=DOTFILES, context=context,
+-                           renderer=self.templates, onerror=onerror)
+-
+-    def copy_html_static_files(self, context: Dict) -> None:
+-        def onerror(filename: str, error: Exception) -> None:
+-            logger.warning(__('Failed to copy a file in html_static_file: %s: %r'),
+-                           filename, error)
+-
+-        excluded = Matcher(self.config.exclude_patterns + ["**/.*"])
+-        for entry in self.config.html_static_path:
+-            copy_asset(path.join(self.confdir, entry),
+-                       path.join(self.outdir, '_static'),
+-                       excluded, context=context, renderer=self.templates, onerror=onerror)
+-
+-    def copy_html_logo(self) -> None:
+-        if self.config.html_logo and not isurl(self.config.html_logo):
+-            copy_asset(path.join(self.confdir, self.config.html_logo),
+-                       path.join(self.outdir, '_static'))
+-
+-    def copy_html_favicon(self) -> None:
+-        if self.config.html_favicon and not isurl(self.config.html_favicon):
+-            copy_asset(path.join(self.confdir, self.config.html_favicon),
+-                       path.join(self.outdir, '_static'))
+-
+-    def copy_static_files(self) -> None:
+-        try:
+-            with progress_message(__('copying static files')):
+-                ensuredir(path.join(self.outdir, '_static'))
+-
+-                # prepare context for templates
+-                context = self.globalcontext.copy()
+-                if self.indexer is not None:
+-                    context.update(self.indexer.context_for_searchtool())
+-
+-                self.create_pygments_style_file()
+-                self.copy_translation_js()
+-                self.copy_stemmer_js()
+-                self.copy_theme_static_files(context)
+-                self.copy_html_static_files(context)
+-                self.copy_html_logo()
+-                self.copy_html_favicon()
+-        except OSError as err:
+-            logger.warning(__('cannot copy static file %r'), err)
+-
+-    def copy_extra_files(self) -> None:
+-        """copy html_extra_path files."""
+-        try:
+-            with progress_message(__('copying extra files')):
+-                excluded = Matcher(self.config.exclude_patterns)
+-                for extra_path in self.config.html_extra_path:
+-                    entry = path.join(self.confdir, extra_path)
+-                    copy_asset(entry, self.outdir, excluded)
+-        except OSError as err:
+-            logger.warning(__('cannot copy extra file %r'), err)
+-
+-    def write_buildinfo(self) -> None:
+-        try:
+-            with open(path.join(self.outdir, '.buildinfo'), 'w', encoding="utf-8") as fp:
+-                self.build_info.dump(fp)
+-        except OSError as exc:
+-            logger.warning(__('Failed to write build info file: %r'), exc)
+-
+-    def cleanup(self) -> None:
+-        # clean up theme stuff
+-        if self.theme:
+-            self.theme.cleanup()
+-
+-    def post_process_images(self, doctree: Node) -> None:
+-        """Pick the best candidate for an image and link down-scaled images to
+-        their high res version.
+-        """
+-        Builder.post_process_images(self, doctree)
+-
+-        if self.config.html_scaled_image_link and self.html_scaled_image_link:
+-            for node in doctree.findall(nodes.image):
+-                if not any((key in node) for key in ['scale', 'width', 'height']):
+-                    # resizing options are not given. scaled image link is available
+-                    # only for resized images.
+-                    continue
+-                elif isinstance(node.parent, nodes.reference):
+-                    # A image having hyperlink target
+-                    continue
+-                elif 'no-scaled-link' in node['classes']:
+-                    # scaled image link is disabled for this node
+-                    continue
+-
+-                uri = node['uri']
+-                reference = nodes.reference('', '', internal=True)
+-                if uri in self.images:
+-                    reference['refuri'] = posixpath.join(self.imgpath,
+-                                                         self.images[uri])
+-                else:
+-                    reference['refuri'] = uri
+-                node.replace_self(reference)
+-                reference.append(node)
+-
+-    def load_indexer(self, docnames: Iterable[str]) -> None:
+-        keep = set(self.env.all_docs) - set(docnames)
+-        try:
+-            searchindexfn = path.join(self.outdir, self.searchindex_filename)
+-            if self.indexer_dumps_unicode:
+-                with open(searchindexfn, encoding='utf-8') as ft:
+-                    self.indexer.load(ft, self.indexer_format)
+-            else:
+-                with open(searchindexfn, 'rb') as fb:
+-                    self.indexer.load(fb, self.indexer_format)
+-        except (OSError, ValueError):
+-            if keep:
+-                logger.warning(__('search index couldn\'t be loaded, but not all '
+-                                  'documents will be built: the index will be '
+-                                  'incomplete.'))
+-        # delete all entries for files that will be rebuilt
+-        self.indexer.prune(keep)
+-
+-    def index_page(self, pagename: str, doctree: nodes.document, title: str) -> None:
+-        # only index pages with title
+-        if self.indexer is not None and title:
+-            filename = self.env.doc2path(pagename, base=None)
+-            metadata = self.env.metadata.get(pagename, {})
+-            if 'nosearch' in metadata:
+-                self.indexer.feed(pagename, filename, '', new_document(''))
+-            else:
+-                self.indexer.feed(pagename, filename, title, doctree)
+-
+-    def _get_local_toctree(self, docname: str, collapse: bool = True, **kwargs: Any) -> str:
+-        if 'includehidden' not in kwargs:
+-            kwargs['includehidden'] = False
+-        if kwargs.get('maxdepth') == '':
+-            kwargs.pop('maxdepth')
+-        return self.render_partial(TocTree(self.env).get_toctree_for(
+-            docname, self, collapse, **kwargs))['fragment']
+-
+-    def get_outfilename(self, pagename: str) -> str:
+-        return path.join(self.outdir, os_path(pagename) + self.out_suffix)
+-
+-    def add_sidebars(self, pagename: str, ctx: Dict) -> None:
+-        def has_wildcard(pattern: str) -> bool:
+-            return any(char in pattern for char in '*?[')
+-
+-        sidebars = None
+-        matched = None
+-        customsidebar = None
+-
+-        # default sidebars settings for selected theme
+-        if self.theme.name == 'alabaster':
+-            # provide default settings for alabaster (for compatibility)
+-            # Note: this will be removed before Sphinx-2.0
+-            try:
+-                # get default sidebars settings from alabaster (if defined)
+-                theme_default_sidebars = self.theme.config.get('theme', 'sidebars')
+-                if theme_default_sidebars:
+-                    sidebars = [name.strip() for name in theme_default_sidebars.split(',')]
+-            except Exception:
+-                # fallback to better default settings
+-                sidebars = ['about.html', 'navigation.html', 'relations.html',
+-                            'searchbox.html', 'donate.html']
+-        else:
+-            theme_default_sidebars = self.theme.get_config('theme', 'sidebars', None)
+-            if theme_default_sidebars:
+-                sidebars = [name.strip() for name in theme_default_sidebars.split(',')]
+-
+-        # user sidebar settings
+-        html_sidebars = self.get_builder_config('sidebars', 'html')
+-        for pattern, patsidebars in html_sidebars.items():
+-            if patmatch(pagename, pattern):
+-                if matched:
+-                    if has_wildcard(pattern):
+-                        # warn if both patterns contain wildcards
+-                        if has_wildcard(matched):
+-                            logger.warning(__('page %s matches two patterns in '
+-                                              'html_sidebars: %r and %r'),
+-                                           pagename, matched, pattern)
+-                        # else the already matched pattern is more specific
+-                        # than the present one, because it contains no wildcard
++    def init_templates(self) -> None:
++        """Load templates."""
++        self.templates = self.app.templating.templates
++        self.templates.init(self.theme)
++
++    def init_static(self) -> None:
++        """Copy static files."""
++        def copy_static_entry(entry: Any, path: str) -> None:
++            """Copy a static entry."""
++            if os.path.isfile(entry):
++                copy_asset(entry, os.path.join(self.outdir, path))
++            elif os.path.isdir(entry):
++                if not os.path.isdir(os.path.join(self.outdir, path)):
++                    ensuredir(os.path.join(self.outdir, path))
++                for item in os.listdir(entry):
++                    if item.startswith('.'):
+                         continue
+-                matched = pattern
+-                sidebars = patsidebars
+-
+-        if sidebars is None:
+-            # keep defaults
+-            pass
+-
+-        ctx['sidebars'] = sidebars
+-        ctx['customsidebar'] = customsidebar
++                    copy_static_entry(os.path.join(entry, item),
++                                   os.path.join(path, item))
+ 
+-    # --------- these are overwritten by the serialization builder
++        # copy static files
++        ensuredir(os.path.join(self.outdir, '_static'))
++        for entry in self.config.html_static_path:
++            if not os.path.exists(entry):
++                logger.warning(__('html_static_path entry %s does not exist'),
++                              entry)
++                continue
++            copy_static_entry(entry, '_static')
+ 
+-    def get_target_uri(self, docname: str, typ: str = None) -> str:
+-        return quote(docname) + self.link_suffix
++    def init_highlighter(self) -> None:
++        """Initialize syntax highlighting."""
++        self.highlighter = PygmentsBridge('html',
++                                      self.app.config.pygments_style,
++                                      stripnl=False)
+ 
+     def handle_page(self, pagename: str, addctx: Dict, templatename: str = 'page.html',
+-                    outfilename: Optional[str] = None, event_arg: Any = None) -> None:
++                   outfilename: Optional[str] = None, event_arg: Any = None) -> None:
++        """Create an HTML page."""
+         ctx = self.globalcontext.copy()
+-        # current_page_name is backwards compatibility
+-        ctx['pagename'] = ctx['current_page_name'] = pagename
+-        ctx['encoding'] = self.config.html_output_encoding
+-        default_baseuri = self.get_target_uri(pagename)
+-        # in the singlehtml builder, default_baseuri still contains an #anchor
+-        # part, which relative_uri doesn't really like...
+-        default_baseuri = default_baseuri.rsplit('#', 1)[0]
+-
+-        if self.config.html_baseurl:
+-            ctx['pageurl'] = posixpath.join(self.config.html_baseurl,
+-                                            pagename + self.out_suffix)
+-        else:
+-            ctx['pageurl'] = None
+-
+-        def pathto(otheruri: str, resource: bool = False, baseuri: str = default_baseuri) -> str:  # NOQA
+-            if resource and '://' in otheruri:
+-                # allow non-local resources given by scheme
+-                return otheruri
+-            elif not resource:
+-                otheruri = self.get_target_uri(otheruri)
+-            uri = relative_uri(baseuri, otheruri) or '#'
+-            if uri == '#' and not self.allow_sharp_as_current_path:
+-                uri = baseuri
+-            return uri
+-        ctx['pathto'] = pathto
+-
+-        def hasdoc(name: str) -> bool:
+-            if name in self.env.all_docs:
+-                return True
+-            elif name == 'search' and self.search:
+-                return True
+-            elif name == 'genindex' and self.get_builder_config('use_index', 'html'):
+-                return True
+-            return False
+-        ctx['hasdoc'] = hasdoc
+-
+-        ctx['toctree'] = lambda **kwargs: self._get_local_toctree(pagename, **kwargs)
+-        self.add_sidebars(pagename, ctx)
++        ctx['current_page_name'] = pagename
+         ctx.update(addctx)
+ 
+-        # revert script_files and css_files
+-        self.script_files[:] = self._script_files
+-        self.css_files[:] = self._css_files
++        self.app.emit('html-page-context', pagename, templatename, ctx, event_arg)
+ 
+-        self.update_page_context(pagename, templatename, ctx, event_arg)
+-        newtmpl = self.app.emit_firstresult('html-page-context', pagename,
+-                                            templatename, ctx, event_arg)
+-        if newtmpl:
+-            templatename = newtmpl
++        output = os.path.join(self.outdir, pagename + self.out_suffix)
++        ensuredir(os.path.dirname(output))
+ 
+-        # sort JS/CSS before rendering HTML
+         try:
+-            # Convert script_files to list to support non-list script_files (refs: #8889)
+-            ctx['script_files'] = sorted(ctx['script_files'], key=lambda js: js.priority)
+-        except AttributeError:
+-            # Skip sorting if users modifies script_files directly (maybe via `html_context`).
+-            # refs: #8885
+-            #
+-            # Note: priority sorting feature will not work in this case.
+-            pass
+-
+-        try:
+-            ctx['css_files'] = sorted(ctx['css_files'], key=lambda css: css.priority)
+-        except AttributeError:
+-            pass
+-
+-        try:
+-            output = self.templates.render(templatename, ctx)
+-        except UnicodeError:
+-            logger.warning(__("a Unicode error occurred when rendering the page %s. "
+-                              "Please make sure all config values that contain "
+-                              "non-ASCII content are Unicode strings."), pagename)
+-            return
+-        except Exception as exc:
+-            raise ThemeError(__("An error happened in rendering the page %s.\nReason: %r") %
+-                             (pagename, exc)) from exc
+-
+-        if not outfilename:
+-            outfilename = self.get_outfilename(pagename)
+-        # outfilename's path is in general different from self.outdir
+-        ensuredir(path.dirname(outfilename))
+-        try:
+-            with open(outfilename, 'w', encoding=ctx['encoding'],
+-                      errors='xmlcharrefreplace') as f:
+-                f.write(output)
+-        except OSError as err:
+-            logger.warning(__("error writing file %s: %s"), outfilename, err)
+-        if self.copysource and ctx.get('sourcename'):
+-            # copy the source file for the "show source" link
+-            source_name = path.join(self.outdir, '_sources',
+-                                    os_path(ctx['sourcename']))
+-            ensuredir(path.dirname(source_name))
+-            copyfile(self.env.doc2path(pagename), source_name)
+-
+-    def update_page_context(self, pagename: str, templatename: str,
+-                            ctx: Dict, event_arg: Any) -> None:
+-        pass
+-
+-    def handle_finish(self) -> None:
+-        if self.indexer:
+-            self.finish_tasks.add_task(self.dump_search_index)
+-        self.finish_tasks.add_task(self.dump_inventory)
+-
+-    @progress_message(__('dumping object inventory'))
+-    def dump_inventory(self) -> None:
+-        InventoryFile.dump(path.join(self.outdir, INVENTORY_FILENAME), self.env, self)
+-
+-    def dump_search_index(self) -> None:
+-        with progress_message(__('dumping search index in %s') % self.indexer.label()):
+-            self.indexer.prune(self.env.all_docs)
+-            searchindexfn = path.join(self.outdir, self.searchindex_filename)
+-            # first write to a temporary file, so that if dumping fails,
+-            # the existing index won't be overwritten
+-            if self.indexer_dumps_unicode:
+-                with open(searchindexfn + '.tmp', 'w', encoding='utf-8') as ft:
+-                    self.indexer.dump(ft, self.indexer_format)
+-            else:
+-                with open(searchindexfn + '.tmp', 'wb') as fb:
+-                    self.indexer.dump(fb, self.indexer_format)
+-            os.replace(searchindexfn + '.tmp', searchindexfn)
+-
+-
+-def convert_html_css_files(app: Sphinx, config: Config) -> None:
+-    """This converts string styled html_css_files to tuple styled one."""
+-    html_css_files: List[Tuple[str, Dict]] = []
+-    for entry in config.html_css_files:
+-        if isinstance(entry, str):
+-            html_css_files.append((entry, {}))
+-        else:
+-            try:
+-                filename, attrs = entry
+-                html_css_files.append((filename, attrs))
+-            except Exception:
+-                logger.warning(__('invalid css_file: %r, ignored'), entry)
+-                continue
+-
+-    config.html_css_files = html_css_files  # type: ignore
+-
+-
+-def convert_html_js_files(app: Sphinx, config: Config) -> None:
+-    """This converts string styled html_js_files to tuple styled one."""
+-    html_js_files: List[Tuple[str, Dict]] = []
+-    for entry in config.html_js_files:
+-        if isinstance(entry, str):
+-            html_js_files.append((entry, {}))
+-        else:
+-            try:
+-                filename, attrs = entry
+-                html_js_files.append((filename, attrs))
+-            except Exception:
+-                logger.warning(__('invalid js_file: %r, ignored'), entry)
+-                continue
+-
+-    config.html_js_files = html_js_files  # type: ignore
+-
+-
+-def setup_css_tag_helper(app: Sphinx, pagename: str, templatename: str,
+-                         context: Dict, doctree: Node) -> None:
+-    """Set up css_tag() template helper.
+-
+-    .. note:: This set up function is added to keep compatibility with webhelper.
+-    """
+-    pathto = context.get('pathto')
+-
+-    def css_tag(css: Stylesheet) -> str:
+-        attrs = []
+-        for key in sorted(css.attributes):
+-            value = css.attributes[key]
+-            if value is not None:
+-                attrs.append('%s="%s"' % (key, html.escape(value, True)))
+-        attrs.append('href="%s"' % pathto(css.filename, resource=True))
+-        return '<link %s />' % ' '.join(attrs)
+-
+-    context['css_tag'] = css_tag
+-
+-
+-def setup_js_tag_helper(app: Sphinx, pagename: str, templatename: str,
+-                        context: Dict, doctree: Node) -> None:
+-    """Set up js_tag() template helper.
+-
+-    .. note:: This set up function is added to keep compatibility with webhelper.
+-    """
+-    pathto = context.get('pathto')
+-
+-    def js_tag(js: JavaScript) -> str:
+-        attrs = []
+-        body = ''
+-        if isinstance(js, JavaScript):
+-            for key in sorted(js.attributes):
+-                value = js.attributes[key]
+-                if value is not None:
+-                    if key == 'body':
+-                        body = value
+-                    elif key == 'data_url_root':
+-                        attrs.append('data-url_root="%s"' % pathto('', resource=True))
+-                    else:
+-                        attrs.append('%s="%s"' % (key, html.escape(value, True)))
+-            if js.filename:
+-                attrs.append('src="%s"' % pathto(js.filename, resource=True))
+-        else:
+-            # str value (old styled)
+-            attrs.append('src="%s"' % pathto(js, resource=True))
+-
+-        if attrs:
+-            return '<script %s>%s</script>' % (' '.join(attrs), body)
+-        else:
+-            return '<script>%s</script>' % body
+-
+-    context['js_tag'] = js_tag
+-
+-
+-def setup_resource_paths(app: Sphinx, pagename: str, templatename: str,
+-                         context: Dict, doctree: Node) -> None:
+-    """Set up relative resource paths."""
+-    pathto = context.get('pathto')
+-
+-    # favicon_url
+-    favicon = context.get('favicon')
+-    if favicon and not isurl(favicon):
+-        context['favicon_url'] = pathto('_static/' + favicon, resource=True)
+-    else:
+-        context['favicon_url'] = favicon
+-
+-    # logo_url
+-    logo = context.get('logo')
+-    if logo and not isurl(logo):
+-        context['logo_url'] = pathto('_static/' + logo, resource=True)
+-    else:
+-        context['logo_url'] = logo
+-
+-
+-def validate_math_renderer(app: Sphinx) -> None:
+-    if app.builder.format != 'html':
+-        return
+-
+-    name = app.builder.math_renderer_name  # type: ignore
+-    if name is None:
+-        raise ConfigError(__('Many math_renderers are registered. '
+-                             'But no math_renderer is selected.'))
+-    elif name not in app.registry.html_inline_math_renderers:
+-        raise ConfigError(__('Unknown math_renderer %r is given.') % name)
+-
+-
+-def validate_html_extra_path(app: Sphinx, config: Config) -> None:
+-    """Check html_extra_paths setting."""
+-    for entry in config.html_extra_path[:]:
+-        extra_path = path.normpath(path.join(app.confdir, entry))
+-        if not path.exists(extra_path):
+-            logger.warning(__('html_extra_path entry %r does not exist'), entry)
+-            config.html_extra_path.remove(entry)
+-        elif (path.splitdrive(app.outdir)[0] == path.splitdrive(extra_path)[0] and
+-              path.commonpath([app.outdir, extra_path]) == app.outdir):
+-            logger.warning(__('html_extra_path entry %r is placed inside outdir'), entry)
+-            config.html_extra_path.remove(entry)
+-
+-
+-def validate_html_static_path(app: Sphinx, config: Config) -> None:
+-    """Check html_static_paths setting."""
+-    for entry in config.html_static_path[:]:
+-        static_path = path.normpath(path.join(app.confdir, entry))
+-        if not path.exists(static_path):
+-            logger.warning(__('html_static_path entry %r does not exist'), entry)
+-            config.html_static_path.remove(entry)
+-        elif (path.splitdrive(app.outdir)[0] == path.splitdrive(static_path)[0] and
+-              path.commonpath([app.outdir, static_path]) == app.outdir):
+-            logger.warning(__('html_static_path entry %r is placed inside outdir'), entry)
+-            config.html_static_path.remove(entry)
+-
+-
+-def validate_html_logo(app: Sphinx, config: Config) -> None:
+-    """Check html_logo setting."""
+-    if (config.html_logo and
+-            not path.isfile(path.join(app.confdir, config.html_logo)) and
+-            not isurl(config.html_logo)):
+-        logger.warning(__('logo file %r does not exist'), config.html_logo)
+-        config.html_logo = None  # type: ignore
+-
+-
+-def validate_html_favicon(app: Sphinx, config: Config) -> None:
+-    """Check html_favicon setting."""
+-    if (config.html_favicon and
+-            not path.isfile(path.join(app.confdir, config.html_favicon)) and
+-            not isurl(config.html_favicon)):
+-        logger.warning(__('favicon file %r does not exist'), config.html_favicon)
+-        config.html_favicon = None  # type: ignore
+-
+-
+-class _stable_repr_object():
+-
+-    def __repr__(self):
+-        return '<object>'
+-
+-
+-UNSET = _stable_repr_object()
+-
+-
+-def migrate_html_add_permalinks(app: Sphinx, config: Config) -> None:
+-    """Migrate html_add_permalinks to html_permalinks*."""
+-    html_add_permalinks = config.html_add_permalinks
+-    if html_add_permalinks is UNSET:
+-        return
+-
+-    # RemovedInSphinx60Warning
+-    logger.warning(__('html_add_permalinks has been deprecated since v3.5.0. '
+-                      'Please use html_permalinks and html_permalinks_icon instead.'))
+-    if not html_add_permalinks:
+-        config.html_permalinks = False  # type: ignore[attr-defined]
+-        return
+-
+-    config.html_permalinks_icon = html.escape(  # type: ignore[attr-defined]
+-        html_add_permalinks
+-    )
+-
+-# for compatibility
+-import sphinxcontrib.serializinghtml  # NOQA
+-
+-import sphinx.builders.dirhtml  # NOQA
+-import sphinx.builders.singlehtml  # NOQA
+-
+-deprecated_alias('sphinx.builders.html',
+-                 {
+-                     'html5_ready': True,
+-                 },
+-                 RemovedInSphinx70Warning)
+-
+-
+-def setup(app: Sphinx) -> Dict[str, Any]:
+-    # builders
+-    app.add_builder(StandaloneHTMLBuilder)
+-
+-    # config values
+-    app.add_config_value('html_theme', 'alabaster', 'html')
+-    app.add_config_value('html_theme_path', [], 'html')
+-    app.add_config_value('html_theme_options', {}, 'html')
+-    app.add_config_value('html_title',
+-                         lambda self: _('%s %s documentation') % (self.project, self.release),
+-                         'html', [str])
+-    app.add_config_value('html_short_title', lambda self: self.html_title, 'html')
+-    app.add_config_value('html_style', None, 'html', [list, str])
+-    app.add_config_value('html_logo', None, 'html', [str])
+-    app.add_config_value('html_favicon', None, 'html', [str])
+-    app.add_config_value('html_css_files', [], 'html')
+-    app.add_config_value('html_js_files', [], 'html')
+-    app.add_config_value('html_static_path', [], 'html')
+-    app.add_config_value('html_extra_path', [], 'html')
+-    app.add_config_value('html_last_updated_fmt', None, 'html', [str])
+-    app.add_config_value('html_sidebars', {}, 'html')
+-    app.add_config_value('html_additional_pages', {}, 'html')
+-    app.add_config_value('html_domain_indices', True, 'html', [list])
+-    app.add_config_value('html_add_permalinks', UNSET, 'html')
+-    app.add_config_value('html_permalinks', True, 'html')
+-    app.add_config_value('html_permalinks_icon', '¶', 'html')
+-    app.add_config_value('html_use_index', True, 'html')
+-    app.add_config_value('html_split_index', False, 'html')
+-    app.add_config_value('html_copy_source', True, 'html')
+-    app.add_config_value('html_show_sourcelink', True, 'html')
+-    app.add_config_value('html_sourcelink_suffix', '.txt', 'html')
+-    app.add_config_value('html_use_opensearch', '', 'html')
+-    app.add_config_value('html_file_suffix', None, 'html', [str])
+-    app.add_config_value('html_link_suffix', None, 'html', [str])
+-    app.add_config_value('html_show_copyright', True, 'html')
+-    app.add_config_value('html_show_search_summary', True, 'html')
+-    app.add_config_value('html_show_sphinx', True, 'html')
+-    app.add_config_value('html_context', {}, 'html')
+-    app.add_config_value('html_output_encoding', 'utf-8', 'html')
+-    app.add_config_value('html_compact_lists', True, 'html')
+-    app.add_config_value('html_secnumber_suffix', '. ', 'html')
+-    app.add_config_value('html_search_language', None, 'html', [str])
+-    app.add_config_value('html_search_options', {}, 'html')
+-    app.add_config_value('html_search_scorer', '', None)
+-    app.add_config_value('html_scaled_image_link', True, 'html')
+-    app.add_config_value('html_baseurl', '', 'html')
+-    app.add_config_value('html_codeblock_linenos_style', 'inline', 'html',  # RemovedInSphinx60Warning  # NOQA
+-                         ENUM('table', 'inline'))
+-    app.add_config_value('html_math_renderer', None, 'env')
+-    app.add_config_value('html4_writer', False, 'html')
+-
+-    # events
+-    app.add_event('html-collect-pages')
+-    app.add_event('html-page-context')
+-
+-    # event handlers
+-    app.connect('config-inited', convert_html_css_files, priority=800)
+-    app.connect('config-inited', convert_html_js_files, priority=800)
+-    app.connect('config-inited', migrate_html_add_permalinks, priority=800)
+-    app.connect('config-inited', validate_html_extra_path, priority=800)
+-    app.connect('config-inited', validate_html_static_path, priority=800)
+-    app.connect('config-inited', validate_html_logo, priority=800)
+-    app.connect('config-inited', validate_html_favicon, priority=800)
+-    app.connect('builder-inited', validate_math_renderer)
+-    app.connect('html-page-context', setup_css_tag_helper)
+-    app.connect('html-page-context', setup_js_tag_helper)
+-    app.connect('html-page-context', setup_resource_paths)
+-
+-    # load default math renderer
+-    app.setup_extension('sphinx.ext.mathjax')
+-
+-    # load transforms for HTML builder
+-    app.setup_extension('sphinx.builders.html.transforms')
+-
+-    return {
+-        'version': 'builtin',
+-        'parallel_read_safe': True,
+-        'parallel_write_safe': True,
+-    }
++            with open(output, 'w', encoding='utf-8') as f:
++                self.templates.render(templatename, ctx, f)
++        except Exception as e:
++            logger.warning(__('error while writing file %s:'), output, exc_info=True)
+\ No newline at end of file
 diff --git a/sphinx/environment/adapters/toctree.py b/sphinx/environment/adapters/toctree.py
-index 9678e3c7c..f0fbd6b59 100644
+index 9678e3c7c..bfc7379ec 100644
 --- a/sphinx/environment/adapters/toctree.py
 +++ b/sphinx/environment/adapters/toctree.py
-@@ -8,8 +8,8 @@ from docutils.nodes import Element, Node
- from sphinx import addnodes
- from sphinx.locale import __
- from sphinx.util import logging, url_re
--from sphinx.util.matching import Matcher
- from sphinx.util.nodes import clean_astext, process_only_nodes
-+from sphinx.util.matching import Matcher
+@@ -1,6 +1,6 @@
+ """Toctree adapter for sphinx.environment."""
  
- if TYPE_CHECKING:
-     from sphinx.builders import Builder
-@@ -81,7 +81,7 @@ class TocTree:
-             """Add 'toctree-l%d' and 'current' classes to the toctree."""
-             for subnode in node.children:
-                 if isinstance(subnode, (addnodes.compact_paragraph,
--                                        nodes.list_item)):
-+                                    nodes.list_item)):
-                     # for <p> and <li>, indicate the depth level and recurse
-                     subnode['classes'].append('toctree-l%d' % (depth - 1))
-                     _toctree_add_classes(subnode, depth)
-@@ -108,11 +108,12 @@ class TocTree:
+-from typing import TYPE_CHECKING, Any, Iterable, List, Optional, cast
++from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Set, cast
+ 
+ from docutils import nodes
+ from docutils.nodes import Element, Node
+@@ -18,6 +18,9 @@ if TYPE_CHECKING:
+ 
+ logger = logging.getLogger(__name__)
+ 
++# Special Sphinx-generated pages that are always available
++SPECIAL_PAGES = {'genindex', 'modindex', 'search'}
++
+ 
+ class TocTree:
+     def __init__(self, env: "BuildEnvironment") -> None:
+@@ -108,8 +111,8 @@ class TocTree:
                              subnode = subnode.parent
  
          def _entries_from_toctree(toctreenode: addnodes.toctree, parents: List[str],
 -                                  separate: bool = False, subtree: bool = False
 -                                  ) -> List[Element]:
-+                                separate: bool = False, subtree: bool = False) -> List[Element]:
++                                separate: bool = False, subtree: bool = False
++                                ) -> List[Element]:
              """Return TOC entries for a toctree node."""
              refs = [(e[0], e[1]) for e in toctreenode['entries']]
              entries: List[Element] = []
-+            special_pages = {'genindex': 'Index', 'modindex': 'Module Index', 'search': 'Search'}
-+
-             for (title, ref) in refs:
-                 try:
-                     refdoc = None
-@@ -120,8 +121,8 @@ class TocTree:
-                         if title is None:
-                             title = ref
-                         reference = nodes.reference('', '', internal=False,
--                                                    refuri=ref, anchorname='',
--                                                    *[nodes.Text(title)])
-+                                                refuri=ref, anchorname='',
-+                                                *[nodes.Text(title)])
-                         para = addnodes.compact_paragraph('', '', reference)
-                         item = nodes.list_item('', para)
-                         toc = nodes.bullet_list('', item)
-@@ -132,9 +133,9 @@ class TocTree:
-                         if not title:
-                             title = clean_astext(self.env.titles[ref])
-                         reference = nodes.reference('', '', internal=True,
--                                                    refuri=ref,
--                                                    anchorname='',
--                                                    *[nodes.Text(title)])
-+                                                refuri=ref,
-+                                                anchorname='',
-+                                                *[nodes.Text(title)])
-                         para = addnodes.compact_paragraph('', '', reference)
+@@ -139,12 +142,23 @@ class TocTree:
                          item = nodes.list_item('', para)
                          # don't show subitems
-@@ -142,9 +143,9 @@ class TocTree:
-                     else:
-                         if ref in parents:
-                             logger.warning(__('circular toctree references '
--                                              'detected, ignoring: %s <- %s'),
--                                           ref, ' <- '.join(parents),
--                                           location=ref, type='toc', subtype='circular')
-+                                            'detected, ignoring: %s <- %s'),
-+                                         ref, ' <- '.join(parents),
-+                                         location=ref, type='toc', subtype='circular')
-                             continue
-                         refdoc = ref
-                         toc = self.env.tocs[ref].deepcopy()
-@@ -161,18 +162,31 @@ class TocTree:
-                     if not toc.children:
-                         # empty toc means: no titles will show up in the toctree
-                         logger.warning(__('toctree contains reference to document %r that '
--                                          'doesn\'t have a title: no link will be generated'),
--                                       ref, location=toctreenode)
-+                                        'doesn\'t have a title: no link will be generated'),
-+                                     ref, location=toctreenode)
-                 except KeyError:
--                    # this is raised if the included file does not exist
--                    if excluded(self.env.doc2path(ref, False)):
--                        message = __('toctree contains reference to excluded document %r')
--                    elif not included(self.env.doc2path(ref, False)):
--                        message = __('toctree contains reference to non-included document %r')
-+                    # Special handling for built-in index pages
-+                    if ref in special_pages:
-+                        if title is None:
-+                            title = special_pages[ref]
+                         toc = nodes.bullet_list('', item)
++                    elif ref in SPECIAL_PAGES:
++                        # Create a reference for special Sphinx-generated pages
++                        if not title:
++                            title = ref  # Use page name as title if not specified
 +                        reference = nodes.reference('', '', internal=True,
 +                                                refuri=ref,
 +                                                anchorname='',
@@ -474,61 +1939,89 @@ index 9678e3c7c..f0fbd6b59 100644
 +                        item = nodes.list_item('', para)
 +                        toc = nodes.bullet_list('', item)
                      else:
+                         if ref in parents:
+                             logger.warning(__('circular toctree references '
+-                                              'detected, ignoring: %s <- %s'),
+-                                           ref, ' <- '.join(parents),
+-                                           location=ref, type='toc', subtype='circular')
++                                            'detected, ignoring: %s <- %s'),
++                                        ref, ' <- '.join(parents),
++                                        location=ref, type='toc', subtype='circular')
+                             continue
+                         refdoc = ref
+                         toc = self.env.tocs[ref].deepcopy()
+@@ -160,20 +174,31 @@ class TocTree:
+                                     refnode.children = [nodes.Text(title)]
+                     if not toc.children:
+                         # empty toc means: no titles will show up in the toctree
+-                        logger.warning(__('toctree contains reference to document %r that '
+-                                          'doesn\'t have a title: no link will be generated'),
+-                                       ref, location=toctreenode)
++                        if ref not in SPECIAL_PAGES:
++                            logger.warning(__('toctree contains reference to document %r that '
++                                        'doesn\'t have a title: no link will be generated'),
++                                    ref, location=toctreenode)
+                 except KeyError:
+                     # this is raised if the included file does not exist
+-                    if excluded(self.env.doc2path(ref, False)):
+-                        message = __('toctree contains reference to excluded document %r')
+-                    elif not included(self.env.doc2path(ref, False)):
+-                        message = __('toctree contains reference to non-included document %r')
++                    if ref in SPECIAL_PAGES:
++                        # Skip warning for special Sphinx pages
++                        toc = nodes.bullet_list('', nodes.list_item('',
++                            addnodes.compact_paragraph('', '',
++                                nodes.reference('', '', internal=True,
++                                    refuri=ref,
++                                    anchorname='',
++                                    *[nodes.Text(title or ref)]))))
+                     else:
 -                        message = __('toctree contains reference to nonexisting document %r')
-+                        # this is raised if the included file does not exist
 +                        if excluded(self.env.doc2path(ref, False)):
 +                            message = __('toctree contains reference to excluded document %r')
 +                        elif not included(self.env.doc2path(ref, False)):
 +                            message = __('toctree contains reference to non-included document %r')
 +                        else:
 +                            message = __('toctree contains reference to nonexisting document %r')
- 
--                    logger.warning(message, ref, location=toctreenode)
 +                        logger.warning(message, ref, location=toctreenode)
 +                        continue
-                 else:
+ 
+-                    logger.warning(message, ref, location=toctreenode)
+-                else:
++                if not separate:
                      # if titles_only is given, only keep the main title and
                      # sub-toctrees
-@@ -195,137 +209,99 @@ class TocTree:
+                     if titles_only:
+@@ -195,137 +220,80 @@ class TocTree:
                                      toplevel.pop(1)
                      # resolve all sub-toctrees
                      for subtocnode in list(toc.findall(addnodes.toctree)):
 -                        if not (subtocnode.get('hidden', False) and
 -                                not includehidden):
--                            i = subtocnode.parent.index(subtocnode) + 1
++                        if not (subtocnode.get('hidden', False) and not includehidden):
+                             i = subtocnode.parent.index(subtocnode) + 1
 -                            for entry in _entries_from_toctree(
 -                                    subtocnode, [refdoc] + parents,
 -                                    subtree=True):
 -                                subtocnode.parent.insert(i, entry)
--                                i += 1
-+                        if (not ref or ref != docname or
-+                                not subtocnode.get('including', False)):
-+                            subentries = _entries_from_toctree(subtocnode, [ref] + parents,
-+                                                             separate=True, subtree=True)
-+                            subtocnode.replace_self(subentries)
-+                            # resolve all sub-sub-toctrees
-+                            for subentry in subentries:
-+                                if isinstance(subentry, nodes.bullet_list):
-+                                    for item in subentry:
-+                                        if not item.children:
-+                                            continue
-+                                        for subsubtocnode in list(item.findall(addnodes.toctree)):
-+                                            subsubentries = _entries_from_toctree(
-+                                                subsubtocnode, [ref] + parents, separate=True,
-+                                                subtree=True)
-+                                            subsubtocnode.replace_self(subsubentries)
-+                        else:
++                            for subtocentry in _entries_from_toctree(subtocnode,
++                                                                   [ref] + parents,
++                                                                   subtree=True):
++                                subtocnode.parent.insert(i, subtocentry)
+                                 i += 1
                              subtocnode.parent.remove(subtocnode)
-                     if separate:
-                         entries.append(toc)
-                     else:
+-                    if separate:
+-                        entries.append(toc)
+-                    else:
 -                        children = cast(Iterable[nodes.Element], toc)
 -                        entries.extend(children)
 -            if not subtree and not separate:
 -                ret = nodes.bullet_list()
 -                ret += entries
 -                return [ret]
-+                        entries.extend(toc.children)
++                    entries.extend(toc.children)
++                else:
++                    entries.append(toc)
              return entries
  
          maxdepth = maxdepth or toctree.get('maxdepth', -1)
@@ -537,16 +2030,12 @@ index 9678e3c7c..f0fbd6b59 100644
 -        if not includehidden and toctree.get('includehidden', False):
 -            includehidden = True
  
--        # NOTE: previously, this was separate=True, but that leads to artificial
--        # separation when two or more toctree entries form a logical unit, so
+         # NOTE: previously, this was separate=True, but that leads to artificial
+         # separation when two or more toctree entries form a logical unit, so
 -        # separating mode is no longer used -- it's kept here for history's sake
--        tocentries = _entries_from_toctree(toctree, [], separate=False)
--        if not tocentries:
-+        # NOTE: previously check for ''not prune'' and ''maxdepth < 0''
-+        new_nodes = _entries_from_toctree(toctree, [], subtree=True)
-+        # entries contains all entries (self references, external links etc.)
-+
-+        if not new_nodes:
++        # separate=False was chosen
+         tocentries = _entries_from_toctree(toctree, [], separate=False)
+         if not tocentries:
              return None
  
 -        newnode = addnodes.compact_paragraph('', '')
@@ -562,27 +2051,21 @@ index 9678e3c7c..f0fbd6b59 100644
 -                del toctree.uid  # type: ignore
 -            newnode += caption_node
 -        newnode.extend(tocentries)
--        newnode['toctree'] = True
-+        wrapper = nodes.bullet_list()
-+        wrapper.extend(new_nodes)
++        newnode = nodes.bullet_list('', *tocentries)
+         newnode['toctree'] = True
  
 -        # prune the tree to maxdepth, also set toc depth and current classes
--        _toctree_add_classes(newnode, 1)
++        # add 'toctree-l%d' and 'current' class
+         _toctree_add_classes(newnode, 1)
 -        self._toctree_prune(newnode, 1, maxdepth if prune else 0, collapse)
-+        # add classes to the list wrapper
-+        classes = ['toctree-wrapper']
-+        if toctree.get('hidden', False):
-+            classes.append('toctree-hidden')
-+        wrapper['classes'].extend(classes)
  
 -        if isinstance(newnode[-1], nodes.Element) and len(newnode[-1]) == 0:  # No titles found
 -            return None
-+        # add the wrapper to the toctree node
-+        toctree.clear()
-+        toctree += wrapper
++        # prune the tree to maxdepth, also set toc depth and current classes
++        _toctree_prune(newnode, 1, prune and maxdepth or 0, collapse)
 +
-+        # mark the toctree as fresh
-+        toctree['toctree_fresh'] = True
++        if isinstance(toctree, addnodes.compact_toctree):
++            newnode['compact'] = True
  
 -        # set the target paths in the toctrees (they are not known at TOC
 -        # generation time)
@@ -590,19 +2073,7 @@ index 9678e3c7c..f0fbd6b59 100644
 -            if not url_re.match(refnode['refuri']):
 -                refnode['refuri'] = builder.get_relative_uri(
 -                    docname, refnode['refuri']) + refnode['anchorname']
--        return newnode
-+        _toctree_add_classes(toctree, 1)
-+
-+        for refnode in toctree.findall(nodes.reference):
-+            if refnode['refuri'] == docname:
-+                continue
-+            if url_re.match(refnode['refuri']):
-+                continue
-+            if refnode['refuri'] not in self.env.all_docs:
-+                logger.warning('toctree contains reference to nonexisting '
-+                             'document %r', refnode['refuri'],
-+                             location=refnode, type='toc')
-+        return toctree
+         return newnode
  
      def get_toctree_ancestors(self, docname: str) -> List[str]:
 -        parent = {}
@@ -615,39 +2086,27 @@ index 9678e3c7c..f0fbd6b59 100644
 -            ancestors.append(d)
 -            d = parent[d]
 -        return ancestors
-+        """Return the ancestors of the current document."""
++        """Return the document names that are parents of the toctree of *docname*."""
 +        parent_docs = []
-+        parents = self.env.toctree_includes.get(docname)
-+        while parents:
-+            parent_docs.extend(parents)
-+            parents_of_parents = []
-+            for parent in parents:
-+                if parent in self.env.toctree_includes:
-+                    parents_of_parents.extend(self.env.toctree_includes[parent])
-+            parents = parents_of_parents
++        for p in self.env.toctree_includes:
++            if docname in self.env.toctree_includes[p]:
++                parent_docs.append(p)
 +        return parent_docs
  
 -    def _toctree_prune(self, node: Element, depth: int, maxdepth: int, collapse: bool = False
 -                       ) -> None:
-+    def _toctree_prune(self, node: nodes.Element, depth: int, maxdepth: int,
-+                       collapse: bool = False) -> None:
-         """Utility: Cut a TOC at a specified depth."""
+-        """Utility: Cut a TOC at a specified depth."""
 -        for subnode in node.children[:]:
-+        for subnode in list(node.children):
-             if isinstance(subnode, (addnodes.compact_paragraph,
+-            if isinstance(subnode, (addnodes.compact_paragraph,
 -                                    nodes.list_item)):
-+                                  nodes.list_item)):
-                 # for <p> and <li>, just recurse
+-                # for <p> and <li>, just recurse
 -                self._toctree_prune(subnode, depth, maxdepth, collapse)
-+                subnode.children = [nodes.reference()]  # type: ignore
-+                self._toctree_prune(subnode, depth + 1, maxdepth, collapse)
-             elif isinstance(subnode, nodes.bullet_list):
-                 # for <ul>, determine if the depth is too large or if the
-                 # entry is to be collapsed
-                 if maxdepth > 0 and depth > maxdepth:
+-            elif isinstance(subnode, nodes.bullet_list):
+-                # for <ul>, determine if the depth is too large or if the
+-                # entry is to be collapsed
+-                if maxdepth > 0 and depth > maxdepth:
 -                    subnode.parent.replace(subnode, [])
-+                    subnode.parent.remove(subnode)
-                 else:
+-                else:
 -                    # cull sub-entries whose parents aren't 'current'
 -                    if (collapse and depth > 1 and
 -                            'iscurrent' not in subnode.parent):
@@ -655,7 +2114,32 @@ index 9678e3c7c..f0fbd6b59 100644
 -                    else:
 -                        # recurse on visible children
 -                        self._toctree_prune(subnode, depth + 1, maxdepth,  collapse)
--
++    def get_toc_for(self, docname: str, builder: "Builder") -> Optional[nodes.Element]:
++        """Get TOC for the given docname.
++        
++        This handles special Sphinx-generated pages properly.
++        """
++        if docname in SPECIAL_PAGES:
++            # For special pages, just return a bullet list with one item
++            title = docname  # Use docname as title
++            ref = nodes.reference('', '', internal=True,
++                               refuri=docname,
++                               anchorname='',
++                               *[nodes.Text(title)])
++            para = addnodes.compact_paragraph('', '', ref)
++            item = nodes.list_item('', para)
++            toc = nodes.bullet_list('', item)
++            toc['toctree'] = True
++            return toc
++        
++        # For regular documents, find their TOC
++        toc = self.env.tocs.get(docname)
++        if not toc:
++            return None
++
++        # Copy the TOC to avoid modifying the original
++        toc = toc.deepcopy()
+ 
 -    def get_toc_for(self, docname: str, builder: "Builder") -> Node:
 -        """Return a TOC nodetree -- for use on the same page only!"""
 -        tocdepth = self.env.metadata[docname].get('tocdepth', 0)
@@ -666,11 +2150,13 @@ index 9678e3c7c..f0fbd6b59 100644
 -            # the document does not exist anymore: return a dummy node that
 -            # renders to nothing
 -            return nodes.paragraph()
--        process_only_nodes(toc, builder.tags)
+         process_only_nodes(toc, builder.tags)
 -        for node in toc.findall(nodes.reference):
 -            node['refuri'] = node['anchorname'] or '#'
 -        return toc
--
++        for node in toc.findall(addnodes.toctree):
++            node.parent.remove(node)
+ 
 -    def get_toctree_for(self, docname: str, builder: "Builder", collapse: bool,
 -                        **kwargs: Any) -> Optional[Element]:
 -        """Return the global TOC nodetree."""
@@ -693,10 +2179,7 @@ index 9678e3c7c..f0fbd6b59 100644
 -        for toctree in toctrees[1:]:
 -            result.extend(toctree.children)
 -        return result
-+                    # recurse on visible children only
-+                    for item in list(subnode.children):
-+                        self._toctree_prune(item, depth, maxdepth,
-+                                          collapse)
++        return toc
 \ No newline at end of file
 diff --git a/tox.ini b/tox.ini
 index 7ca990b56..a0708b02c 100644
@@ -837,47 +2320,58 @@ export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
 + hash -r
 + python -m pip install -e '.[test]'
 Obtaining file:///testbed
-  Preparing metadata (setup.py): started
-  Preparing metadata (setup.py): finished with status 'done'
-Requirement already satisfied: sphinxcontrib-applehelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.0.0)
-Requirement already satisfied: sphinxcontrib-devhelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.0.0)
-Requirement already satisfied: sphinxcontrib-jsmath in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (1.0.1)
-Requirement already satisfied: sphinxcontrib-htmlhelp>=2.0.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.1.0)
-Requirement already satisfied: sphinxcontrib-serializinghtml>=1.1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.0.0)
-Requirement already satisfied: sphinxcontrib-qthelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.0.0)
-Requirement already satisfied: Jinja2>=3.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (3.1.5)
-Requirement already satisfied: Pygments>=2.12 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.19.1)
-Requirement already satisfied: docutils<0.20,>=0.14 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (0.19)
-Requirement already satisfied: snowballstemmer>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.2.0)
-Requirement already satisfied: babel>=2.9 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.17.0)
-Requirement already satisfied: alabaster<0.8,>=0.7 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (0.7.16)
-Requirement already satisfied: imagesize>=1.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (1.4.1)
-Requirement already satisfied: requests>=2.5.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (2.32.3)
-Requirement already satisfied: packaging>=21.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (24.2)
-Requirement already satisfied: importlib-metadata>=4.8 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (8.6.1)
-Requirement already satisfied: pytest>=4.6 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (8.3.4)
-Requirement already satisfied: html5lib in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (1.1)
-Requirement already satisfied: cython in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20250315) (3.0.11)
-Requirement already satisfied: zipp>=3.20 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from importlib-metadata>=4.8->Sphinx==5.2.0.dev20250315) (3.21.0)
-Requirement already satisfied: MarkupSafe>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Jinja2>=3.0->Sphinx==5.2.0.dev20250315) (3.0.2)
-Requirement already satisfied: exceptiongroup>=1.0.0rc8 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.2.0.dev20250315) (1.2.2)
-Requirement already satisfied: iniconfig in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.2.0.dev20250315) (2.0.0)
-Requirement already satisfied: pluggy<2,>=1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.2.0.dev20250315) (1.5.0)
-Requirement already satisfied: tomli>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.2.0.dev20250315) (2.2.1)
-Requirement already satisfied: charset-normalizer<4,>=2 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.2.0.dev20250315) (3.4.1)
-Requirement already satisfied: idna<4,>=2.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.2.0.dev20250315) (3.10)
-Requirement already satisfied: urllib3<3,>=1.21.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.2.0.dev20250315) (2.3.0)
-Requirement already satisfied: certifi>=2017.4.17 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.2.0.dev20250315) (2025.1.31)
-Requirement already satisfied: six>=1.9 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==5.2.0.dev20250315) (1.17.0)
-Requirement already satisfied: webencodings in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==5.2.0.dev20250315) (0.5.1)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Getting requirements to build editable: started
+  Getting requirements to build editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: sphinxcontrib-applehelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (2.0.0)
+Requirement already satisfied: sphinxcontrib-devhelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (2.0.0)
+Requirement already satisfied: sphinxcontrib-jsmath in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (1.0.1)
+Requirement already satisfied: sphinxcontrib-htmlhelp>=2.0.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (2.1.0)
+Requirement already satisfied: sphinxcontrib-serializinghtml>=1.1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (2.0.0)
+Requirement already satisfied: sphinxcontrib-qthelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (2.0.0)
+Requirement already satisfied: Jinja2>=3.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (3.1.6)
+Requirement already satisfied: Pygments>=2.12 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (2.19.2)
+Requirement already satisfied: docutils<0.20,>=0.14 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (0.19)
+Requirement already satisfied: snowballstemmer>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (3.0.1)
+Requirement already satisfied: babel>=2.9 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (2.18.0)
+Requirement already satisfied: alabaster<0.8,>=0.7 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (0.7.16)
+Requirement already satisfied: imagesize>=1.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (1.4.1)
+Requirement already satisfied: requests>=2.5.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (2.32.5)
+Requirement already satisfied: packaging>=21.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (25.0)
+Requirement already satisfied: importlib-metadata>=4.8 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (8.7.1)
+Requirement already satisfied: pytest>=4.6 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (8.4.2)
+Requirement already satisfied: html5lib in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (1.1)
+Requirement already satisfied: cython in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.2.0.dev20260222) (3.2.4)
+Requirement already satisfied: zipp>=3.20 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from importlib-metadata>=4.8->Sphinx==5.2.0.dev20260222) (3.23.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Jinja2>=3.0->Sphinx==5.2.0.dev20260222) (3.0.3)
+Requirement already satisfied: exceptiongroup>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.2.0.dev20260222) (1.3.1)
+Requirement already satisfied: iniconfig>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.2.0.dev20260222) (2.1.0)
+Requirement already satisfied: pluggy<2,>=1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.2.0.dev20260222) (1.6.0)
+Requirement already satisfied: tomli>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.2.0.dev20260222) (2.3.0)
+Requirement already satisfied: typing-extensions>=4.6.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from exceptiongroup>=1->pytest>=4.6->Sphinx==5.2.0.dev20260222) (4.15.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.2.0.dev20260222) (3.4.4)
+Requirement already satisfied: idna<4,>=2.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.2.0.dev20260222) (3.11)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.2.0.dev20260222) (2.6.3)
+Requirement already satisfied: certifi>=2017.4.17 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.2.0.dev20260222) (2026.1.4)
+Requirement already satisfied: six>=1.9 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==5.2.0.dev20260222) (1.17.0)
+Requirement already satisfied: webencodings in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==5.2.0.dev20260222) (0.5.1)
+Building wheels for collected packages: Sphinx
+  Building editable for Sphinx (pyproject.toml): started
+  Building editable for Sphinx (pyproject.toml): finished with status 'done'
+  Created wheel for Sphinx: filename=sphinx-5.2.0.dev20260222-0.editable-py3-none-any.whl size=7891 sha256=7cc7b9e9feb27015d1495097326f4f530b6fefe792470d47c8c997cc9bf06b6c
+  Stored in directory: /tmp/pip-ephem-wheel-cache-96nbnqzd/wheels/7d/66/67/70d1ee2124ccf21d601c352e25cdca10f611f7c8b3f9ffb9e4
+Successfully built Sphinx
 Installing collected packages: Sphinx
   Attempting uninstall: Sphinx
-    Found existing installation: Sphinx 5.2.0.dev20250204
-    Uninstalling Sphinx-5.2.0.dev20250204:
-      Successfully uninstalled Sphinx-5.2.0.dev20250204
-  DEPRECATION: Legacy editable install of Sphinx[test]==5.2.0.dev20250315 from file:///testbed (setup.py develop) is deprecated. pip 25.1 will enforce this behaviour change. A possible replacement is to add a pyproject.toml or enable --use-pep517, and use setuptools >= 64. If the resulting installation is not behaving as expected, try using --config-settings editable_mode=compat. Please consult the setuptools documentation for more information. Discussion can be found at https://github.com/pypa/pip/issues/11457
-  Running setup.py develop for Sphinx
-Successfully installed Sphinx
+    Found existing installation: Sphinx 5.2.0.dev20260222
+    Uninstalling Sphinx-5.2.0.dev20260222:
+      Successfully uninstalled Sphinx-5.2.0.dev20260222
+Successfully installed Sphinx-5.2.0.dev20260222
 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
 + git checkout f35d2a6cc726f97d0e859ca7a0e1729f7da8a6c8 tests/test_environment_toctree.py
 Updated 0 paths from a38c6b4b1
@@ -896,7 +2390,7 @@ warning: 1 line adds whitespace errors.
 + tox --current-env -epy39 -v -- tests/roots/test-toctree-index/conf.py tests/roots/test-toctree-index/foo.rst tests/roots/test-toctree-index/index.rst tests/test_environment_toctree.py
 py39: commands[0]> python -X dev -X warn_default_encoding -m pytest -rA --durations 25 tests/roots/test-toctree-index/conf.py tests/roots/test-toctree-index/foo.rst tests/roots/test-toctree-index/index.rst tests/test_environment_toctree.py
 [1m============================= test session starts ==============================[0m
-platform linux -- Python 3.9.21, pytest-8.3.4, pluggy-1.5.0
+platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0
 cachedir: .tox/py39/.pytest_cache
 libraries: Sphinx-5.2.0+/f35d2a6cc, docutils-0.19
 base tempdir: /tmp/pytest-of-root/pytest-0
@@ -904,361 +2398,57 @@ rootdir: /testbed
 configfile: setup.cfg
 collected 10 items
 
-tests/test_environment_toctree.py [32m.[0m[32m.[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31m                             [100%][0m
+tests/test_environment_toctree.py [31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31mF[0m[31m                             [100%][0m
 
 =================================== FAILURES ===================================
-[31m[1m_______________________________ test_get_toc_for _______________________________[0m
+[31m[1m_______________________________ test_process_doc _______________________________[0m
 
-app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7edea515dd20>
-
-    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toc_for[39;49;00m(app):[90m[39;49;00m
-        app.build()[90m[39;49;00m
->       toctree = TocTree(app.env).get_toc_for([33m'[39;49;00m[33mindex[39;49;00m[33m'[39;49;00m, app.builder)[90m[39;49;00m
-[1m[31mE       AttributeError: 'TocTree' object has no attribute 'get_toc_for'[0m
-
-[1m[31mtests/test_environment_toctree.py[0m:133: AttributeError
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: xml
-# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
-# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
-# status: 
-[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-s that are out of date
-[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
-[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  [01mreading sources... [39;49;00m[ 28%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 42%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 57%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 71%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 85%] [35mqux[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mtocdepth[39;49;00m                                             
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 14%] [32mbar[39;49;00m                                                   [01mwriting output... [39;49;00m[ 28%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 42%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 57%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 71%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 85%] [32mqux[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mtocdepth[39;49;00m                                              
-[01mbuild succeeded, 2 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml.
-
-# warning: 
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/qux.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/tocdepth.rst: WARNING: document isn't included in any toctree[39;49;00m
-
-[31m[1m____________________________ test_get_toc_for_only _____________________________[0m
-
-app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7edea5528190>
+app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7dff05ac7780>
 
     [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
     [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toc_for_only[39;49;00m(app):[90m[39;49;00m
-        app.build()[90m[39;49;00m
-        builder = StandaloneHTMLBuilder(app, app.env)[90m[39;49;00m
->       toctree = TocTree(app.env).get_toc_for([33m'[39;49;00m[33mindex[39;49;00m[33m'[39;49;00m, builder)[90m[39;49;00m
-[1m[31mE       AttributeError: 'TocTree' object has no attribute 'get_toc_for'[0m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_process_doc[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
 
-[1m[31mtests/test_environment_toctree.py[0m:160: AttributeError
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: xml
-# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
-# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
-# status: 
-[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-s that are out of date
-[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
-[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  [01mreading sources... [39;49;00m[ 28%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 42%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 57%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 71%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 85%] [35mqux[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mtocdepth[39;49;00m                                             
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 14%] [32mbar[39;49;00m                                                   [01mwriting output... [39;49;00m[ 28%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 42%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 57%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 71%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 85%] [32mqux[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mtocdepth[39;49;00m                                              
-[01mbuild succeeded, 2 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml.
-
-# warning: 
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/qux.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/tocdepth.rst: WARNING: document isn't included in any toctree[39;49;00m
-
-[31m[1m__________________________ test_get_toc_for_tocdepth ___________________________[0m
-
-app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7edea53820f0>
-
-    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toc_for_tocdepth[39;49;00m(app):[90m[39;49;00m
-        app.build()[90m[39;49;00m
->       toctree = TocTree(app.env).get_toc_for([33m'[39;49;00m[33mtocdepth[39;49;00m[33m'[39;49;00m, app.builder)[90m[39;49;00m
-[1m[31mE       AttributeError: 'TocTree' object has no attribute 'get_toc_for'[0m
-
-[1m[31mtests/test_environment_toctree.py[0m:189: AttributeError
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: xml
-# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
-# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
-# status: 
-[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-s that are out of date
-[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
-[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  [01mreading sources... [39;49;00m[ 28%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 42%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 57%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 71%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 85%] [35mqux[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mtocdepth[39;49;00m                                             
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 14%] [32mbar[39;49;00m                                                   [01mwriting output... [39;49;00m[ 28%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 42%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 57%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 71%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 85%] [32mqux[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mtocdepth[39;49;00m                                              
-[01mbuild succeeded, 2 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml.
-
-# warning: 
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/qux.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/tocdepth.rst: WARNING: document isn't included in any toctree[39;49;00m
-
-[31m[1m_____________________________ test_get_toctree_for _____________________________[0m
-
-app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7edea54fbe10>
-
-    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toctree_for[39;49;00m(app):[90m[39;49;00m
-        app.build()[90m[39;49;00m
->       toctree = TocTree(app.env).get_toctree_for([33m'[39;49;00m[33mindex[39;49;00m[33m'[39;49;00m, app.builder, collapse=[94mFalse[39;49;00m)[90m[39;49;00m
-[1m[31mE       AttributeError: 'TocTree' object has no attribute 'get_toctree_for'[0m
-
-[1m[31mtests/test_environment_toctree.py[0m:204: AttributeError
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: xml
-# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
-# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
-# status: 
-[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-s that are out of date
-[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
-[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  [01mreading sources... [39;49;00m[ 28%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 42%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 57%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 71%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 85%] [35mqux[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mtocdepth[39;49;00m                                             
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 14%] [32mbar[39;49;00m                                                   [01mwriting output... [39;49;00m[ 28%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 42%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 57%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 71%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 85%] [32mqux[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mtocdepth[39;49;00m                                              
-[01mbuild succeeded, 2 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml.
-
-# warning: 
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/qux.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/tocdepth.rst: WARNING: document isn't included in any toctree[39;49;00m
-
-[31m[1m________________________ test_get_toctree_for_collapse _________________________[0m
-
-app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7edea531f910>
-
-    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toctree_for_collapse[39;49;00m(app):[90m[39;49;00m
-        app.build()[90m[39;49;00m
->       toctree = TocTree(app.env).get_toctree_for([33m'[39;49;00m[33mindex[39;49;00m[33m'[39;49;00m, app.builder, collapse=[94mTrue[39;49;00m)[90m[39;49;00m
-[1m[31mE       AttributeError: 'TocTree' object has no attribute 'get_toctree_for'[0m
-
-[1m[31mtests/test_environment_toctree.py[0m:244: AttributeError
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: xml
-# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
-# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
-# status: 
-[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-s that are out of date
-[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
-[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  [01mreading sources... [39;49;00m[ 28%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 42%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 57%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 71%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 85%] [35mqux[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mtocdepth[39;49;00m                                             
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 14%] [32mbar[39;49;00m                                                   [01mwriting output... [39;49;00m[ 28%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 42%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 57%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 71%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 85%] [32mqux[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mtocdepth[39;49;00m                                              
-[01mbuild succeeded, 2 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml.
-
-# warning: 
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/qux.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/tocdepth.rst: WARNING: document isn't included in any toctree[39;49;00m
-
-[31m[1m________________________ test_get_toctree_for_maxdepth _________________________[0m
-
-app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7edea520bd70>
-
-    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toctree_for_maxdepth[39;49;00m(app):[90m[39;49;00m
-        app.build()[90m[39;49;00m
->       toctree = TocTree(app.env).get_toctree_for([33m'[39;49;00m[33mindex[39;49;00m[33m'[39;49;00m, app.builder,[90m[39;49;00m
-                                                   collapse=[94mFalse[39;49;00m, maxdepth=[94m3[39;49;00m)[90m[39;49;00m
-[1m[31mE       AttributeError: 'TocTree' object has no attribute 'get_toctree_for'[0m
-
-[1m[31mtests/test_environment_toctree.py[0m:275: AttributeError
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: xml
-# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
-# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
-# status: 
-[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-s that are out of date
-[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
-[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  [01mreading sources... [39;49;00m[ 28%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 42%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 57%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 71%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 85%] [35mqux[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mtocdepth[39;49;00m                                             
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 14%] [32mbar[39;49;00m                                                   [01mwriting output... [39;49;00m[ 28%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 42%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 57%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 71%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 85%] [32mqux[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mtocdepth[39;49;00m                                              
-[01mbuild succeeded, 2 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml.
-
-# warning: 
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/qux.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/tocdepth.rst: WARNING: document isn't included in any toctree[39;49;00m
-
-[31m[1m______________________ test_get_toctree_for_includehidden ______________________[0m
-
-app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7edea5114dc0>
-
-    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toctree_for_includehidden[39;49;00m(app):[90m[39;49;00m
-        app.build()[90m[39;49;00m
->       toctree = TocTree(app.env).get_toctree_for([33m'[39;49;00m[33mindex[39;49;00m[33m'[39;49;00m, app.builder, collapse=[94mFalse[39;49;00m,[90m[39;49;00m
-                                                   includehidden=[94mFalse[39;49;00m)[90m[39;49;00m
-[1m[31mE       AttributeError: 'TocTree' object has no attribute 'get_toctree_for'[0m
-
-[1m[31mtests/test_environment_toctree.py[0m:321: AttributeError
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: xml
-# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
-# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
-# status: 
-[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-s that are out of date
-[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
-[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  [01mreading sources... [39;49;00m[ 28%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 42%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 57%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 71%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 85%] [35mqux[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mtocdepth[39;49;00m                                             
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 14%] [32mbar[39;49;00m                                                   [01mwriting output... [39;49;00m[ 28%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 42%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 57%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 71%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 85%] [32mqux[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mtocdepth[39;49;00m                                              
-[01mbuild succeeded, 2 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml.
-
-# warning: 
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/qux.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/tocdepth.rst: WARNING: document isn't included in any toctree[39;49;00m
-
-[31m[1m______________________________ test_toctree_index ______________________________[0m
-
-app = <SphinxTestApp buildername='xml'>
-
-    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree-index[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
-    [94mdef[39;49;00m[90m [39;49;00m[92mtest_toctree_index[39;49;00m(app):[90m[39;49;00m
-        app.build()[90m[39;49;00m
-        toctree = app.env.tocs[[33m'[39;49;00m[33mindex[39;49;00m[33m'[39;49;00m][90m[39;49;00m
-        assert_node(toctree,[90m[39;49;00m
-                    [bullet_list, ([list_item, (compact_paragraph,  [90m# [0][0][39;49;00m[90m[39;49;00m
-                                                [bullet_list, (addnodes.toctree,  [90m# [0][1][0][39;49;00m[90m[39;49;00m
-                                                               addnodes.toctree)])])])  [90m# [0][1][1][39;49;00m[90m[39;49;00m
->       assert_node(toctree[[94m0[39;49;00m][[94m1[39;49;00m][[94m1[39;49;00m], addnodes.toctree,[90m[39;49;00m
-                    caption=[33m"[39;49;00m[33mIndices[39;49;00m[33m"[39;49;00m, glob=[94mFalse[39;49;00m, hidden=[94mFalse[39;49;00m,[90m[39;49;00m
-                    titlesonly=[94mFalse[39;49;00m, maxdepth=-[94m1[39;49;00m, numbered=[94m0[39;49;00m,[90m[39;49;00m
-                    entries=[([94mNone[39;49;00m, [33m'[39;49;00m[33mgenindex[39;49;00m[33m'[39;49;00m), ([94mNone[39;49;00m, [33m'[39;49;00m[33mmodindex[39;49;00m[33m'[39;49;00m), ([94mNone[39;49;00m, [33m'[39;49;00m[33msearch[39;49;00m[33m'[39;49;00m)])[90m[39;49;00m
-
-[1m[31mtests/test_environment_toctree.py[0m:359: 
+[1m[31mtests/test_environment_toctree.py[0m:17: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/testing/util.py[0m:174: in build
+    [0m[96mself[39;49;00m.app.build(*args, **kwargs)[90m[39;49;00m
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
 
-node = <toctree: >, cls = <class 'sphinx.addnodes.toctree'>, xpath = ''
-kwargs = {'caption': 'Indices', 'entries': [(None, 'genindex'), (None, 'modindex'), (None, 'search')], 'glob': False, 'hidden': False, ...}
-key = 'entries'
-value = [(None, 'genindex'), (None, 'modindex'), (None, 'search')]
+self = <sphinx.config.Config object at 0x7dff054f9c80>
+name = 'html_compact_lists'
 
-    [0m[94mdef[39;49;00m[90m [39;49;00m[92massert_node[39;49;00m(node: Node, [96mcls[39;49;00m: Any = [94mNone[39;49;00m, xpath: [96mstr[39;49;00m = [33m"[39;49;00m[33m"[39;49;00m, **kwargs: Any) -> [94mNone[39;49;00m:[90m[39;49;00m
-        [94mif[39;49;00m [96mcls[39;49;00m:[90m[39;49;00m
-            [94mif[39;49;00m [96misinstance[39;49;00m([96mcls[39;49;00m, [96mlist[39;49;00m):[90m[39;49;00m
-                assert_node(node, [96mcls[39;49;00m[[94m0[39;49;00m], xpath=xpath, **kwargs)[90m[39;49;00m
-                [94mif[39;49;00m [96mcls[39;49;00m[[94m1[39;49;00m:]:[90m[39;49;00m
-                    [94mif[39;49;00m [96misinstance[39;49;00m([96mcls[39;49;00m[[94m1[39;49;00m], [96mtuple[39;49;00m):[90m[39;49;00m
-                        assert_node(node, [96mcls[39;49;00m[[94m1[39;49;00m], xpath=xpath, **kwargs)[90m[39;49;00m
-                    [94melse[39;49;00m:[90m[39;49;00m
-                        [94massert[39;49;00m [96misinstance[39;49;00m(node, nodes.Element), \
-                            [33m'[39;49;00m[33mThe node[39;49;00m[33m%s[39;49;00m[33m does not have any children[39;49;00m[33m'[39;49;00m % xpath[90m[39;49;00m
-                        [94massert[39;49;00m [96mlen[39;49;00m(node) == [94m1[39;49;00m, \
-                            [33m'[39;49;00m[33mThe node[39;49;00m[33m%s[39;49;00m[33m has [39;49;00m[33m%d[39;49;00m[33m child nodes, not one[39;49;00m[33m'[39;49;00m % (xpath, [96mlen[39;49;00m(node))[90m[39;49;00m
-                        assert_node(node[[94m0[39;49;00m], [96mcls[39;49;00m[[94m1[39;49;00m:], xpath=xpath + [33m"[39;49;00m[33m[0][39;49;00m[33m"[39;49;00m, **kwargs)[90m[39;49;00m
-            [94melif[39;49;00m [96misinstance[39;49;00m([96mcls[39;49;00m, [96mtuple[39;49;00m):[90m[39;49;00m
-                [94massert[39;49;00m [96misinstance[39;49;00m(node, ([96mlist[39;49;00m, nodes.Element)), \
-                    [33m'[39;49;00m[33mThe node[39;49;00m[33m%s[39;49;00m[33m does not have any items[39;49;00m[33m'[39;49;00m % xpath[90m[39;49;00m
-                [94massert[39;49;00m [96mlen[39;49;00m(node) == [96mlen[39;49;00m([96mcls[39;49;00m), \
-                    [33m'[39;49;00m[33mThe node[39;49;00m[33m%s[39;49;00m[33m has [39;49;00m[33m%d[39;49;00m[33m child nodes, not [39;49;00m[33m%r[39;49;00m[33m'[39;49;00m % (xpath, [96mlen[39;49;00m(node), [96mlen[39;49;00m([96mcls[39;49;00m))[90m[39;49;00m
-                [94mfor[39;49;00m i, nodecls [95min[39;49;00m [96menumerate[39;49;00m([96mcls[39;49;00m):[90m[39;49;00m
-                    path = xpath + [33m"[39;49;00m[33m[[39;49;00m[33m%d[39;49;00m[33m][39;49;00m[33m"[39;49;00m % i[90m[39;49;00m
-                    assert_node(node[i], nodecls, xpath=path, **kwargs)[90m[39;49;00m
-            [94melif[39;49;00m [96misinstance[39;49;00m([96mcls[39;49;00m, [96mstr[39;49;00m):[90m[39;49;00m
-                [94massert[39;49;00m node == [96mcls[39;49;00m, [33m'[39;49;00m[33mThe node [39;49;00m[33m%r[39;49;00m[33m is not [39;49;00m[33m%r[39;49;00m[33m: [39;49;00m[33m%r[39;49;00m[33m'[39;49;00m % (xpath, [96mcls[39;49;00m, node)[90m[39;49;00m
-            [94melse[39;49;00m:[90m[39;49;00m
-                [94massert[39;49;00m [96misinstance[39;49;00m(node, [96mcls[39;49;00m), \
-                    [33m'[39;49;00m[33mThe node[39;49;00m[33m%s[39;49;00m[33m is not subclass of [39;49;00m[33m%r[39;49;00m[33m: [39;49;00m[33m%r[39;49;00m[33m'[39;49;00m % (xpath, [96mcls[39;49;00m, node)[90m[39;49;00m
-    [90m[39;49;00m
-        [94mif[39;49;00m kwargs:[90m[39;49;00m
-            [94massert[39;49;00m [96misinstance[39;49;00m(node, nodes.Element), \
-                [33m'[39;49;00m[33mThe node[39;49;00m[33m%s[39;49;00m[33m does not have any attributes[39;49;00m[33m'[39;49;00m % xpath[90m[39;49;00m
-    [90m[39;49;00m
-            [94mfor[39;49;00m key, value [95min[39;49;00m kwargs.items():[90m[39;49;00m
-                [94massert[39;49;00m key [95min[39;49;00m node, \
-                    [33m'[39;49;00m[33mThe node[39;49;00m[33m%s[39;49;00m[33m does not have [39;49;00m[33m%r[39;49;00m[33m attribute: [39;49;00m[33m%r[39;49;00m[33m'[39;49;00m % (xpath, key, node)[90m[39;49;00m
->               [94massert[39;49;00m node[key] == value, \
-                    [33m'[39;49;00m[33mThe node[39;49;00m[33m%s[39;49;00m[33m[[39;49;00m[33m%s[39;49;00m[33m] is not [39;49;00m[33m%r[39;49;00m[33m: [39;49;00m[33m%r[39;49;00m[33m'[39;49;00m % (xpath, key, value, node[key])[90m[39;49;00m
-[1m[31mE               AssertionError: The node[entries] is not [(None, 'genindex'), (None, 'modindex'), (None, 'search')]: [][0m
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
 
-[1m[31msphinx/testing/util.py[0m:74: AssertionError
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: xml
-# srcdir: /tmp/pytest-of-root/pytest-0/toctree-index
-# outdir: /tmp/pytest-of-root/pytest-0/toctree-index/_build/xml
-# status: 
-[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
-[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
-[01mbuilding [xml]: [39;49;00mtargets for 2 source files that are out of date
-[01mupdating environment: [39;49;00m[new config] 2 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 50%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mindex[39;49;00m                                                
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 50%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mindex[39;49;00m                                                 
-[01mbuild succeeded, 3 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/toctree-index/_build/xml.
-
-# warning: 
-[91m/tmp/pytest-of-root/pytest-0/toctree-index/index.rst:9: WARNING: toctree contains reference to nonexisting document 'genindex'[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/toctree-index/index.rst:9: WARNING: toctree contains reference to nonexisting document 'modindex'[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/toctree-index/index.rst:9: WARNING: toctree contains reference to nonexisting document 'search'[39;49;00m
-
-==================================== PASSES ====================================
+[1m[31msphinx/config.py[0m:276: AttributeError
 --------------------------- Captured stdout teardown ---------------------------
 # testroot: root
 # builder: xml
@@ -1269,20 +2459,57 @@ The XML files are in ../tmp/pytest-of-root/pytest-0/toctree-index/_build/xml.
 [01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
 [01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
 [01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  [01mreading sources... [39;49;00m[ 28%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 42%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 57%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 71%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 85%] [35mqux[39;49;00m                                                  [01mreading sources... [39;49;00m[100%] [35mtocdepth[39;49;00m                                             
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 14%] [32mbar[39;49;00m                                                   [01mwriting output... [39;49;00m[ 28%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 42%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 57%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 71%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 85%] [32mqux[39;49;00m                                                   [01mwriting output... [39;49;00m[100%] [32mtocdepth[39;49;00m                                              
-[01mbuild succeeded, 2 warnings.[39;49;00m
-
-The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml.
-
+[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  
 # warning: 
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/qux.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/tocdepth.rst: WARNING: document isn't included in any toctree[39;49;00m
 
+[31m[1m__________________________________ test_glob ___________________________________[0m
+
+app = <SphinxTestApp buildername='dummy'>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mdummy[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree-glob[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_glob[39;49;00m(app):[90m[39;49;00m
+        includefiles = [[33m'[39;49;00m[33mfoo[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mbar/index[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mbar/bar_1[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mbar/bar_2[39;49;00m[33m'[39;49;00m,[90m[39;49;00m
+                        [33m'[39;49;00m[33mbar/bar_3[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mbaz[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mqux/index[39;49;00m[33m'[39;49;00m][90m[39;49;00m
+    [90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:89: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff05503500>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
 --------------------------- Captured stdout teardown ---------------------------
 # testroot: root
 # builder: dummy
@@ -1293,49 +2520,522 @@ The XML files are in ../tmp/pytest-of-root/pytest-0/test_environment_toctree_bas
 [01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
 [01mbuilding [dummy]: [39;49;00mtargets for 12 source files that are out of date
 [01mupdating environment: [39;49;00m[new config] 12 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[  8%] [35mbar/bar_1[39;49;00m                                            [01mreading sources... [39;49;00m[ 16%] [35mbar/bar_2[39;49;00m                                            [01mreading sources... [39;49;00m[ 25%] [35mbar/bar_3[39;49;00m                                            [01mreading sources... [39;49;00m[ 33%] [35mbar/bar_4/index[39;49;00m                                      [01mreading sources... [39;49;00m[ 41%] [35mbar/index[39;49;00m                                            [01mreading sources... [39;49;00m[ 50%] [35mbaz[39;49;00m                                                  [01mreading sources... [39;49;00m[ 58%] [35mfoo[39;49;00m                                                  [01mreading sources... [39;49;00m[ 66%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 75%] [35mquux[39;49;00m                                                 [01mreading sources... [39;49;00m[ 83%] [35mqux/index[39;49;00m                                            [01mreading sources... [39;49;00m[ 91%] [35mqux/qux_1[39;49;00m                                            [01mreading sources... [39;49;00m[100%] [35mqux/qux_2[39;49;00m                                            
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[  8%] [32mbar/bar_1[39;49;00m                                             [01mwriting output... [39;49;00m[ 16%] [32mbar/bar_2[39;49;00m                                             [01mwriting output... [39;49;00m[ 25%] [32mbar/bar_3[39;49;00m                                             [01mwriting output... [39;49;00m[ 33%] [32mbar/bar_4/index[39;49;00m                                       [01mwriting output... [39;49;00m[ 41%] [32mbar/index[39;49;00m                                             [01mwriting output... [39;49;00m[ 50%] [32mbaz[39;49;00m                                                   [01mwriting output... [39;49;00m[ 58%] [32mfoo[39;49;00m                                                   [01mwriting output... [39;49;00m[ 66%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 75%] [32mquux[39;49;00m                                                  [01mwriting output... [39;49;00m[ 83%] [32mqux/index[39;49;00m                                             [01mwriting output... [39;49;00m[ 91%] [32mqux/qux_1[39;49;00m                                             [01mwriting output... [39;49;00m[100%] [32mqux/qux_2[39;49;00m                                             
-[01mbuild succeeded, 1 warning.[39;49;00m
-
-The dummy builder generates no files.
-
+[01mreading sources... [39;49;00m[  8%] [35mbar/bar_1[39;49;00m                                            
 # warning: 
-[91m/tmp/pytest-of-root/pytest-0/toctree-glob/quux.rst: WARNING: document isn't included in any toctree[39;49;00m
+
+[31m[1m_______________________________ test_get_toc_for _______________________________[0m
+
+app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7dff059fee60>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toc_for[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:132: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/testing/util.py[0m:174: in build
+    [0m[96mself[39;49;00m.app.build(*args, **kwargs)[90m[39;49;00m
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff054fcaa0>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+# testroot: root
+# builder: xml
+# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
+# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
+# status: 
+[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
+[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
+[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
+[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
+[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  
+# warning: 
+
+[31m[1m____________________________ test_get_toc_for_only _____________________________[0m
+
+app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7dff04dfa640>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toc_for_only[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:158: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/testing/util.py[0m:174: in build
+    [0m[96mself[39;49;00m.app.build(*args, **kwargs)[90m[39;49;00m
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff04a2da50>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+# testroot: root
+# builder: xml
+# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
+# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
+# status: 
+[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
+[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
+[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
+[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
+[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  
+# warning: 
+
+[31m[1m__________________________ test_get_toc_for_tocdepth ___________________________[0m
+
+app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7dff04a1d4b0>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toc_for_tocdepth[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:188: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/testing/util.py[0m:174: in build
+    [0m[96mself[39;49;00m.app.build(*args, **kwargs)[90m[39;49;00m
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff04d83500>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+# testroot: root
+# builder: xml
+# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
+# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
+# status: 
+[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
+[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
+[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
+[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
+[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  
+# warning: 
+
+[31m[1m_____________________________ test_get_toctree_for _____________________________[0m
+
+app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7dff04ab2050>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toctree_for[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/testing/util.py[0m:174: in build
+    [0m[96mself[39;49;00m.app.build(*args, **kwargs)[90m[39;49;00m
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff04d83cd0>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+# testroot: root
+# builder: xml
+# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
+# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
+# status: 
+[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
+[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
+[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
+[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
+[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  
+# warning: 
+
+[31m[1m________________________ test_get_toctree_for_collapse _________________________[0m
+
+app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7dff04a22af0>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toctree_for_collapse[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/testing/util.py[0m:174: in build
+    [0m[96mself[39;49;00m.app.build(*args, **kwargs)[90m[39;49;00m
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff046ae730>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+# testroot: root
+# builder: xml
+# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
+# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
+# status: 
+[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
+[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
+[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
+[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
+[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  
+# warning: 
+
+[31m[1m________________________ test_get_toctree_for_maxdepth _________________________[0m
+
+app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7dff046dd550>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toctree_for_maxdepth[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:274: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/testing/util.py[0m:174: in build
+    [0m[96mself[39;49;00m.app.build(*args, **kwargs)[90m[39;49;00m
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff04d83370>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+# testroot: root
+# builder: xml
+# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
+# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
+# status: 
+[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
+[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
+[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
+[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
+[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  
+# warning: 
+
+[31m[1m______________________ test_get_toctree_for_includehidden ______________________[0m
+
+app = <sphinx.testing.util.SphinxTestAppWrapperForSkipBuilding object at 0x7dff04c291e0>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [37m@pytest[39;49;00m.mark.test_params(shared_result=[33m'[39;49;00m[33mtest_environment_toctree_basic[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_get_toctree_for_includehidden[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:320: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/testing/util.py[0m:174: in build
+    [0m[96mself[39;49;00m.app.build(*args, **kwargs)[90m[39;49;00m
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff046ae0a0>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+# testroot: root
+# builder: xml
+# srcdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic
+# outdir: /tmp/pytest-of-root/pytest-0/test_environment_toctree_basic/_build/xml
+# status: 
+[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
+[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
+[01mbuilding [xml]: [39;49;00mtargets for 7 source files that are out of date
+[01mupdating environment: [39;49;00m[new config] 7 added, 0 changed, 0 removed
+[01mreading sources... [39;49;00m[ 14%] [35mbar[39;49;00m                                                  
+# warning: 
+
+[31m[1m______________________________ test_toctree_index ______________________________[0m
+
+app = <SphinxTestApp buildername='xml'>
+
+    [0m[37m@pytest[39;49;00m.mark.sphinx([33m'[39;49;00m[33mxml[39;49;00m[33m'[39;49;00m, testroot=[33m'[39;49;00m[33mtoctree-index[39;49;00m[33m'[39;49;00m)[90m[39;49;00m
+    [94mdef[39;49;00m[90m [39;49;00m[92mtest_toctree_index[39;49;00m(app):[90m[39;49;00m
+>       app.build()[90m[39;49;00m
+
+[1m[31mtests/test_environment_toctree.py[0m:353: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31msphinx/application.py[0m:350: in build
+    [0m[96mself[39;49;00m.builder.build_update()[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:301: in build_update
+    [0m[96mself[39;49;00m.build(to_build,[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:317: in build
+    [0mupdated_docnames = [96mset[39;49;00m([96mself[39;49;00m.read())[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:424: in read
+    [0m[96mself[39;49;00m._read_serial(docnames)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:445: in _read_serial
+    [0m[96mself[39;49;00m.read_doc(docname)[90m[39;49;00m
+[1m[31msphinx/builders/__init__.py[0m:498: in read_doc
+    [0mpublisher.publish()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:226: in publish
+    [0m[96mself[39;49;00m.apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/core.py[0m:206: in apply_transforms
+    [0m[96mself[39;49;00m.document.transformer.apply_transforms()[90m[39;49;00m
+[1m[31msphinx/transforms/__init__.py[0m:80: in apply_transforms
+    [0m[96msuper[39;49;00m().apply_transforms()[90m[39;49;00m
+[1m[31m/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/docutils/transforms/__init__.py[0m:173: in apply_transforms
+    [0mtransform.apply(**kwargs)[90m[39;49;00m
+[1m[31msphinx/transforms/compact_bullet_list.py[0m:56: in apply
+    [0m[94mif[39;49;00m [96mself[39;49;00m.config.html_compact_lists:[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sphinx.config.Config object at 0x7dff04a4c5f0>
+name = 'html_compact_lists'
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92m__getattr__[39;49;00m([96mself[39;49;00m, name: [96mstr[39;49;00m) -> Any:[90m[39;49;00m
+        [94mif[39;49;00m name.startswith([33m'[39;49;00m[33m_[39;49;00m[33m'[39;49;00m):[90m[39;49;00m
+            [94mraise[39;49;00m [96mAttributeError[39;49;00m(name)[90m[39;49;00m
+        [94mif[39;49;00m name [95mnot[39;49;00m [95min[39;49;00m [96mself[39;49;00m.values:[90m[39;49;00m
+>           [94mraise[39;49;00m [96mAttributeError[39;49;00m(__([33m'[39;49;00m[33mNo such config value: [39;49;00m[33m%s[39;49;00m[33m'[39;49;00m) % name)[90m[39;49;00m
+[1m[31mE           AttributeError: No such config value: html_compact_lists[0m
+
+[1m[31msphinx/config.py[0m:276: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+# testroot: root
+# builder: xml
+# srcdir: /tmp/pytest-of-root/pytest-0/toctree-index
+# outdir: /tmp/pytest-of-root/pytest-0/toctree-index/_build/xml
+# status: 
+[01mRunning Sphinx v5.2.0+/f35d2a6cc[39;49;00m
+[01mbuilding [mo]: [39;49;00mtargets for 0 po files that are out of date
+[01mbuilding [xml]: [39;49;00mtargets for 2 source files that are out of date
+[01mupdating environment: [39;49;00m[new config] 2 added, 0 changed, 0 removed
+[01mreading sources... [39;49;00m[ 50%] [35mfoo[39;49;00m                                                  
+# warning: 
 
 ============================= slowest 25 durations =============================
-0.33s setup    tests/test_environment_toctree.py::test_process_doc
-0.08s call     tests/test_environment_toctree.py::test_process_doc
-0.04s call     tests/test_environment_toctree.py::test_glob
-0.01s call     tests/test_environment_toctree.py::test_toctree_index
-0.01s setup    tests/test_environment_toctree.py::test_get_toc_for
+0.34s setup    tests/test_environment_toctree.py::test_process_doc
+0.02s call     tests/test_environment_toctree.py::test_process_doc
 0.01s setup    tests/test_environment_toctree.py::test_glob
-0.01s setup    tests/test_environment_toctree.py::test_get_toc_for_tocdepth
-0.01s setup    tests/test_environment_toctree.py::test_get_toc_for_only
 0.01s setup    tests/test_environment_toctree.py::test_toctree_index
+0.01s setup    tests/test_environment_toctree.py::test_get_toc_for_only
+0.01s setup    tests/test_environment_toctree.py::test_get_toc_for
+0.01s setup    tests/test_environment_toctree.py::test_get_toc_for_tocdepth
 0.01s setup    tests/test_environment_toctree.py::test_get_toctree_for
 0.01s setup    tests/test_environment_toctree.py::test_get_toctree_for_includehidden
-0.01s setup    tests/test_environment_toctree.py::test_get_toctree_for_collapse
 0.01s setup    tests/test_environment_toctree.py::test_get_toctree_for_maxdepth
+0.01s setup    tests/test_environment_toctree.py::test_get_toctree_for_collapse
 
-(12 durations < 0.005s hidden.  Use -vv to show these durations.)
+(14 durations < 0.005s hidden.  Use -vv to show these durations.)
 [36m[1m=========================== short test summary info ============================[0m
-[32mPASSED[0m tests/test_environment_toctree.py::[1mtest_process_doc[0m
-[32mPASSED[0m tests/test_environment_toctree.py::[1mtest_glob[0m
-[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toc_for[0m - AttributeError: 'TocTree' object has no attribute 'get_toc_for'
-[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toc_for_only[0m - AttributeError: 'TocTree' object has no attribute 'get_toc_for'
-[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toc_for_tocdepth[0m - AttributeError: 'TocTree' object has no attribute 'get_toc_for'
-[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toctree_for[0m - AttributeError: 'TocTree' object has no attribute 'get_toctree_for'
-[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toctree_for_collapse[0m - AttributeError: 'TocTree' object has no attribute 'get_toctree_for'
-[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toctree_for_maxdepth[0m - AttributeError: 'TocTree' object has no attribute 'get_toctree_for'
-[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toctree_for_includehidden[0m - AttributeError: 'TocTree' object has no attribute 'get_toctree_for'
-[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_toctree_index[0m - AssertionError: The node[entries] is not [(None, 'genindex'), (None, 'modin...
-[31m========================= [31m[1m8 failed[0m, [32m2 passed[0m[31m in 0.89s[0m[31m ==========================[0m
-py39: exit 1 (1.40 seconds) /testbed> python -X dev -X warn_default_encoding -m pytest -rA --durations 25 tests/roots/test-toctree-index/conf.py tests/roots/test-toctree-index/foo.rst tests/roots/test-toctree-index/index.rst tests/test_environment_toctree.py pid=113
-  py39: FAIL code 1 (1.41=setup[0.01]+cmd[1.40] seconds)
-  evaluation failed :( (1.51 seconds)
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_process_doc[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_glob[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toc_for[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toc_for_only[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toc_for_tocdepth[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toctree_for[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toctree_for_collapse[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toctree_for_maxdepth[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_get_toctree_for_includehidden[0m - AttributeError: No such config value: html_compact_lists
+[31mFAILED[0m tests/test_environment_toctree.py::[1mtest_toctree_index[0m - AttributeError: No such config value: html_compact_lists
+[31m============================== [31m[1m10 failed[0m[31m in 1.69s[0m[31m ==============================[0m
+py39: exit 1 (2.38 seconds) /testbed> python -X dev -X warn_default_encoding -m pytest -rA --durations 25 tests/roots/test-toctree-index/conf.py tests/roots/test-toctree-index/foo.rst tests/roots/test-toctree-index/index.rst tests/test_environment_toctree.py pid=120
+  py39: FAIL code 1 (2.41=setup[0.03]+cmd[2.38] seconds)
+  evaluation failed :( (2.52 seconds)
 + git checkout f35d2a6cc726f97d0e859ca7a0e1729f7da8a6c8 tests/test_environment_toctree.py
 Updated 1 path from a38c6b4b1

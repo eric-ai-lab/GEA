@@ -12,7 +12,8 @@
                 ]
             },
             "PASS_TO_PASS": {
-                "success": [
+                "success": [],
+                "failure": [
                     "tests/test_util_inspect.py::test_signature",
                     "tests/test_util_inspect.py::test_signature_partial",
                     "tests/test_util_inspect.py::test_signature_methods",
@@ -46,8 +47,7 @@
                     "tests/test_util_inspect.py::test_unpartial",
                     "tests/test_util_inspect.py::test_getdoc_inherited_decorated_method",
                     "tests/test_util_inspect.py::test_is_builtin_class_method"
-                ],
-                "failure": []
+                ]
             },
             "FAIL_TO_FAIL": {
                 "success": [],

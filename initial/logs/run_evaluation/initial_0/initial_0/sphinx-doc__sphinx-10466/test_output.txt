@@ -131,7 +131,6 @@ export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
 + git config --global --add safe.directory /testbed
 + cd /testbed
 + git status
-+ git show
 On branch master
 Changes not staged for commit:
   (use "git add <file>..." to update what will be committed)
@@ -140,6 +139,7 @@ Changes not staged for commit:
 	modified:   tox.ini
 
 no changes added to commit (use "git add" and/or "git commit -a")
++ git show
 commit cab2d93076d0cca7c53fac885f927dde3e2a5fec
 Merge: dea4873a8 8fc2178f1
 Author: Takeshi KOMIYA <i.tkomiya@gmail.com>
@@ -151,168 +151,101 @@ Date:   Sun May 22 19:22:24 2022 +0900
 
 + git diff cab2d93076d0cca7c53fac885f927dde3e2a5fec
 diff --git a/sphinx/builders/gettext.py b/sphinx/builders/gettext.py
-index e8bc547b7..e2f45d548 100644
+index e8bc547b7..2c4c5343a 100644
 --- a/sphinx/builders/gettext.py
 +++ b/sphinx/builders/gettext.py
-@@ -32,8 +32,10 @@ class Message:
+@@ -32,7 +32,8 @@ class Message:
      """An entry of translatable message."""
      def __init__(self, text: str, locations: List[Tuple[str, int]], uuids: List[str]):
          self.text = text
 -        self.locations = locations
--        self.uuids = uuids
-+        # Remove duplicate locations while preserving order
-+        seen = set()
-+        self.locations = [x for x in locations if not (x in seen or seen.add(x))]  # type: ignore
-+        self.uuids = [uuid for i, uuid in enumerate(uuids) if locations[i] not in seen]  # Remove UUIDs from duplicate locations
++        # Deduplicate locations by converting to a set and back to list
++        self.locations = list(set(locations))
+         self.uuids = uuids
  
  
- class Catalog:
-@@ -55,10 +57,25 @@ class Catalog:
-             self.metadata[msg] = []
-         self.metadata[msg].append((origin.source, origin.line, origin.uid))  # type: ignore
- 
-+    def merge(self, other: "Catalog") -> None:
-+        """Merge another catalog into this one."""
-+        for msg in other.messages:
-+            if msg not in self.metadata:
-+                self.messages.append(msg)
-+                self.metadata[msg] = []
-+            self.metadata[msg].extend(other.metadata[msg])
-+
-     def __iter__(self) -> Generator[Message, None, None]:
-         for message in self.messages:
--            positions = [(source, line) for source, line, uuid in self.metadata[message]]
--            uuids = [uuid for source, line, uuid in self.metadata[message]]
-+            positions = []
-+            uuids = []
-+            seen = set()
-+            for source, line, uuid in self.metadata[message]:
-+                location = (source, line)
-+                if location not in seen:
-+                    positions.append(location)
-+                    uuids.append(uuid)
-+                    seen.add(location)
-             yield Message(message, positions, uuids)
- 
- 
-@@ -119,7 +136,7 @@ class I18nBuilder(Builder):
-     def init(self) -> None:
-         super().init()
-         self.env.set_versioning_method(self.versioning_method,
--                                       self.env.config.gettext_uuid)
-+                                   self.env.config.gettext_uuid)
-         self.tags = I18nTags()
-         self.catalogs: DefaultDict[str, Catalog] = defaultdict(Catalog)
- 
-@@ -136,7 +153,12 @@ class I18nBuilder(Builder):
+@@ -136,7 +137,8 @@ class I18nBuilder(Builder):
          return
  
      def write_doc(self, docname: str, doctree: nodes.document) -> None:
 -        catalog = self.catalogs[docname_to_domain(docname, self.config.gettext_compact)]
-+        if isinstance(self.config.gettext_compact, str):
-+            # When gettext_compact is a string value, all messages go into that catalog
-+            domain = self.config.gettext_compact
-+        else:
-+            domain = docname_to_domain(docname, self.config.gettext_compact)
++        domain = self.config.gettext_compact if isinstance(self.config.gettext_compact, str) else docname_to_domain(docname, self.config.gettext_compact)
 +        catalog = self.catalogs[domain]
  
          for toctree in self.env.tocs[docname].findall(addnodes.toctree):
              for node, msg in extract_messages(toctree):
-@@ -214,6 +236,7 @@ class MessageCatalogBuilder(I18nBuilder):
-         super().init()
-         self.create_template_bridge()
-         self.templates.init(self)
-+        ensuredir(self.outdir)
- 
-     def _collect_templates(self) -> Set[str]:
-         template_files = set()
-@@ -235,20 +258,33 @@ class MessageCatalogBuilder(I18nBuilder):
-         extract_translations = self.templates.environment.extract_translations
- 
-         for template in status_iterator(files, __('reading templates... '), "purple",
--                                        len(files), self.app.verbosity):
-+                                    len(files), self.app.verbosity):
-             try:
-                 with open(template, encoding='utf-8') as f:
+@@ -241,7 +243,8 @@ class MessageCatalogBuilder(I18nBuilder):
                      context = f.read()
                  for line, _meth, msg in extract_translations(context):
                      origin = MsgOrigin(template, line)
 -                    self.catalogs['sphinx'].add(msg, origin)
-+                    if isinstance(self.config.gettext_compact, str):
-+                        self.catalogs[self.config.gettext_compact].add(msg, origin)
-+                    else:
-+                        self.catalogs['sphinx'].add(msg, origin)
++                    domain = self.config.gettext_compact if isinstance(self.config.gettext_compact, str) else "sphinx"
++                    self.catalogs[domain].add(msg, origin)
              except Exception as exc:
                  raise ThemeError('%s: %r' % (template, exc)) from exc
  
--    def build(self, docnames: Iterable[str], summary: str = None, method: str = 'update') -> None:  # NOQA
-+    def build(self, docnames: Iterable[str], summary: str = None, method: str = 'update') -> None:
-+        if isinstance(self.config.gettext_compact, str):
-+            self.catalogs.clear()
-+            self.catalogs = defaultdict(Catalog)
-+
-         self._extract_from_template()
-         super().build(docnames, summary, method)
+@@ -251,26 +254,43 @@ class MessageCatalogBuilder(I18nBuilder):
  
-+        # In 'string' gettext_compact mode, ensure the catalog exists even if empty
-+        if isinstance(self.config.gettext_compact, str):
-+            catalog_name = self.config.gettext_compact
-+            if catalog_name not in self.catalogs:
-+                self.catalogs[catalog_name] = Catalog()
-+
      def finish(self) -> None:
          super().finish()
++
          context = {
-@@ -261,27 +297,34 @@ class MessageCatalogBuilder(I18nBuilder):
+-            'version': self.config.version,
+-            'copyright': self.config.copyright,
+-            'project': self.config.project,
++            'version': self.config.version or '',
++            'copyright': self.config.copyright or '',
++            'project': self.config.project or 'Python',
+             'last_translator': self.config.gettext_last_translator,
+             'language_team': self.config.gettext_language_team,
+             'ctime': datetime.fromtimestamp(timestamp, ltz).strftime('%Y-%m-%d %H:%M%z'),
              'display_location': self.config.gettext_location,
              'display_uuid': self.config.gettext_uuid,
          }
--        for textdomain, catalog in status_iterator(self.catalogs.items(),
--                                                   __("writing message catalogs... "),
--                                                   "darkgreen", len(self.catalogs),
++
++        # If gettext_compact is a string value, merge all catalogs into one
++        if isinstance(self.config.gettext_compact, str):
++            new_catalogs = defaultdict(Catalog)
++            domain = self.config.gettext_compact
++
++            # Merge all existing catalogs into one
++            for _, catalog in self.catalogs.items():
++                for msg in catalog:
++                    for location in msg.locations:
++                        origin = MsgOrigin(location[0], location[1])
++                        new_catalogs[domain].add(msg.text, origin)
++
++            self.catalogs = new_catalogs
++
+         for textdomain, catalog in status_iterator(self.catalogs.items(),
+                                                    __("writing message catalogs... "),
+                                                    "darkgreen", len(self.catalogs),
 -                                                   self.app.verbosity,
 -                                                   lambda textdomain__: textdomain__[0]):
 -            # noop if config.gettext_compact is set
--            ensuredir(path.join(self.outdir, path.dirname(textdomain)))
++                                                   self.app.verbosity):
+             ensuredir(path.join(self.outdir, path.dirname(textdomain)))
  
 -            context['messages'] = list(catalog)
 -            content = GettextRenderer(outdir=self.outdir).render('message.pot_t', context)
-+        renderer = GettextRenderer(outdir=self.outdir)
-+
-+        for textdomain, catalog in status_iterator(
-+                sorted(self.catalogs.items()), __("writing message catalogs... "),
-+                "darkgreen", len(self.catalogs), self.app.verbosity):
-+            
-+            # Always write compact catalog directly to the output directory
-+            if isinstance(self.config.gettext_compact, str):
-+                outfilename = path.join(self.outdir, textdomain + '.pot')
-+            else:
-+                # Handle subdirectories for non-compact mode
-+                outfilename = path.join(self.outdir, textdomain + '.pot')
-+                if outfilename.endswith('/index.pot'):
-+                    outfilename = outfilename[:-9] + '.pot'
-+                dirpath = path.dirname(outfilename)
-+                ensuredir(dirpath)
++            content = GettextRenderer(outdir=self.outdir).render('message.pot_t', {
++                'messages': list(catalog),
++                'textdomain': textdomain,
++                **context
++            })
  
--            pofn = path.join(self.outdir, textdomain + '.pot')
--            if should_write(pofn, content):
--                with open(pofn, 'w', encoding='utf-8') as pofile:
-+            context['messages'] = list(catalog)
-+            content = renderer.render('message.pot_t', context)
-+            if should_write(outfilename, content):
-+                with open(outfilename, 'w', encoding='utf-8') as pofile:
-                     pofile.write(content)
- 
- 
+             pofn = path.join(self.outdir, textdomain + '.pot')
+             if should_write(pofn, content):
+@@ -281,7 +301,7 @@ class MessageCatalogBuilder(I18nBuilder):
  def setup(app: Sphinx) -> Dict[str, Any]:
      app.add_builder(MessageCatalogBuilder)
--
+ 
 -    app.add_config_value('gettext_compact', True, 'gettext', {bool, str})
 +    app.add_config_value('gettext_compact', True, 'gettext')
      app.add_config_value('gettext_location', True, 'gettext')
      app.add_config_value('gettext_uuid', False, 'gettext')
      app.add_config_value('gettext_auto_build', True, 'env')
-@@ -293,4 +336,4 @@ def setup(app: Sphinx) -> Dict[str, Any]:
+@@ -293,4 +313,4 @@ def setup(app: Sphinx) -> Dict[str, Any]:
          'version': 'builtin',
          'parallel_read_safe': True,
          'parallel_write_safe': True,
@@ -458,47 +391,58 @@ export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
 + hash -r
 + python -m pip install -e '.[test]'
 Obtaining file:///testbed
-  Preparing metadata (setup.py): started
-  Preparing metadata (setup.py): finished with status 'done'
-Requirement already satisfied: sphinxcontrib-applehelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.0.0)
-Requirement already satisfied: sphinxcontrib-devhelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.0.0)
-Requirement already satisfied: sphinxcontrib-jsmath in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (1.0.1)
-Requirement already satisfied: sphinxcontrib-htmlhelp>=2.0.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.1.0)
-Requirement already satisfied: sphinxcontrib-serializinghtml>=1.1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.0.0)
-Requirement already satisfied: sphinxcontrib-qthelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.0.0)
-Requirement already satisfied: Jinja2>=2.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (3.1.5)
-Requirement already satisfied: Pygments>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.19.1)
-Requirement already satisfied: docutils<0.19,>=0.14 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (0.18.1)
-Requirement already satisfied: snowballstemmer>=1.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.2.0)
-Requirement already satisfied: babel>=1.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.17.0)
-Requirement already satisfied: alabaster<0.8,>=0.7 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (0.7.16)
-Requirement already satisfied: imagesize in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (1.4.1)
-Requirement already satisfied: requests>=2.5.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (2.32.3)
-Requirement already satisfied: packaging in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (24.2)
-Requirement already satisfied: importlib-metadata>=4.4 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (8.6.1)
-Requirement already satisfied: pytest>=4.6 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (8.3.4)
-Requirement already satisfied: html5lib in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (1.1)
-Requirement already satisfied: cython in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20250315) (3.0.11)
-Requirement already satisfied: zipp>=3.20 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from importlib-metadata>=4.4->Sphinx==5.0.0b1.dev20250315) (3.21.0)
-Requirement already satisfied: MarkupSafe>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Jinja2>=2.3->Sphinx==5.0.0b1.dev20250315) (3.0.2)
-Requirement already satisfied: exceptiongroup>=1.0.0rc8 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.0.0b1.dev20250315) (1.2.2)
-Requirement already satisfied: iniconfig in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.0.0b1.dev20250315) (2.0.0)
-Requirement already satisfied: pluggy<2,>=1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.0.0b1.dev20250315) (1.5.0)
-Requirement already satisfied: tomli>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.0.0b1.dev20250315) (2.2.1)
-Requirement already satisfied: charset-normalizer<4,>=2 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.0.0b1.dev20250315) (3.4.1)
-Requirement already satisfied: idna<4,>=2.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.0.0b1.dev20250315) (3.10)
-Requirement already satisfied: urllib3<3,>=1.21.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.0.0b1.dev20250315) (2.3.0)
-Requirement already satisfied: certifi>=2017.4.17 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.0.0b1.dev20250315) (2025.1.31)
-Requirement already satisfied: six>=1.9 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==5.0.0b1.dev20250315) (1.17.0)
-Requirement already satisfied: webencodings in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==5.0.0b1.dev20250315) (0.5.1)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Getting requirements to build editable: started
+  Getting requirements to build editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: sphinxcontrib-applehelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (2.0.0)
+Requirement already satisfied: sphinxcontrib-devhelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (2.0.0)
+Requirement already satisfied: sphinxcontrib-jsmath in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (1.0.1)
+Requirement already satisfied: sphinxcontrib-htmlhelp>=2.0.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (2.1.0)
+Requirement already satisfied: sphinxcontrib-serializinghtml>=1.1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (2.0.0)
+Requirement already satisfied: sphinxcontrib-qthelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (2.0.0)
+Requirement already satisfied: Jinja2>=2.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (3.1.6)
+Requirement already satisfied: Pygments>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (2.19.2)
+Requirement already satisfied: docutils<0.19,>=0.14 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (0.18.1)
+Requirement already satisfied: snowballstemmer>=1.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (3.0.1)
+Requirement already satisfied: babel>=1.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (2.18.0)
+Requirement already satisfied: alabaster<0.8,>=0.7 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (0.7.16)
+Requirement already satisfied: imagesize in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (1.4.1)
+Requirement already satisfied: requests>=2.5.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (2.32.5)
+Requirement already satisfied: packaging in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (25.0)
+Requirement already satisfied: importlib-metadata>=4.4 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (8.7.1)
+Requirement already satisfied: pytest>=4.6 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (8.4.2)
+Requirement already satisfied: html5lib in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (1.1)
+Requirement already satisfied: cython in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==5.0.0b1.dev20260222) (3.2.4)
+Requirement already satisfied: zipp>=3.20 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from importlib-metadata>=4.4->Sphinx==5.0.0b1.dev20260222) (3.23.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Jinja2>=2.3->Sphinx==5.0.0b1.dev20260222) (3.0.3)
+Requirement already satisfied: exceptiongroup>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.0.0b1.dev20260222) (1.3.1)
+Requirement already satisfied: iniconfig>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.0.0b1.dev20260222) (2.1.0)
+Requirement already satisfied: pluggy<2,>=1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.0.0b1.dev20260222) (1.6.0)
+Requirement already satisfied: tomli>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest>=4.6->Sphinx==5.0.0b1.dev20260222) (2.3.0)
+Requirement already satisfied: typing-extensions>=4.6.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from exceptiongroup>=1->pytest>=4.6->Sphinx==5.0.0b1.dev20260222) (4.15.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.0.0b1.dev20260222) (3.4.4)
+Requirement already satisfied: idna<4,>=2.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.0.0b1.dev20260222) (3.11)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.0.0b1.dev20260222) (2.6.3)
+Requirement already satisfied: certifi>=2017.4.17 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==5.0.0b1.dev20260222) (2026.1.4)
+Requirement already satisfied: six>=1.9 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==5.0.0b1.dev20260222) (1.17.0)
+Requirement already satisfied: webencodings in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==5.0.0b1.dev20260222) (0.5.1)
+Building wheels for collected packages: Sphinx
+  Building editable for Sphinx (pyproject.toml): started
+  Building editable for Sphinx (pyproject.toml): finished with status 'done'
+  Created wheel for Sphinx: filename=sphinx-5.0.0b1.dev20260222-0.editable-py3-none-any.whl size=8455 sha256=0db3b7fe78da9047684c11361a17aa2bb3fca2ee34e295b3519b240eeb1e62be
+  Stored in directory: /tmp/pip-ephem-wheel-cache-hsxphj5k/wheels/7d/66/67/70d1ee2124ccf21d601c352e25cdca10f611f7c8b3f9ffb9e4
+Successfully built Sphinx
 Installing collected packages: Sphinx
   Attempting uninstall: Sphinx
-    Found existing installation: Sphinx 5.0.0b1.dev20250204
-    Uninstalling Sphinx-5.0.0b1.dev20250204:
-      Successfully uninstalled Sphinx-5.0.0b1.dev20250204
-  DEPRECATION: Legacy editable install of Sphinx[test]==5.0.0b1.dev20250315 from file:///testbed (setup.py develop) is deprecated. pip 25.1 will enforce this behaviour change. A possible replacement is to add a pyproject.toml or enable --use-pep517, and use setuptools >= 64. If the resulting installation is not behaving as expected, try using --config-settings editable_mode=compat. Please consult the setuptools documentation for more information. Discussion can be found at https://github.com/pypa/pip/issues/11457
-  Running setup.py develop for Sphinx
-Successfully installed Sphinx
+    Found existing installation: Sphinx 5.0.0b1.dev20260222
+    Uninstalling Sphinx-5.0.0b1.dev20260222:
+      Successfully uninstalled Sphinx-5.0.0b1.dev20260222
+Successfully installed Sphinx-5.0.0b1.dev20260222
 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
 + git checkout cab2d93076d0cca7c53fac885f927dde3e2a5fec tests/test_build_gettext.py
 Updated 0 paths from 04de92458
@@ -508,7 +452,7 @@ Applied patch tests/test_build_gettext.py cleanly.
 + tox --current-env -epy39 -v -- tests/test_build_gettext.py
 py39: commands[0]> python -X dev -X warn_default_encoding -m pytest -rA --durations 25 tests/test_build_gettext.py
 [1m============================= test session starts ==============================[0m
-platform linux -- Python 3.9.21, pytest-8.3.4, pluggy-1.5.0
+platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0
 cachedir: .tox/py39/.pytest_cache
 libraries: Sphinx-5.0.0b1, docutils-0.18.1
 base tempdir: /tmp/pytest-of-root/pytest-0
@@ -516,9 +460,32 @@ rootdir: /testbed
 configfile: setup.cfg
 collected 8 items
 
-tests/test_build_gettext.py [32m.[0m[32m.[0m[33ms[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[31mF[0m[31m                                     [100%][0m
+tests/test_build_gettext.py [31mF[0m[32m.[0m[33ms[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[31mF[0m[31m                                     [100%][0m
 
 =================================== FAILURES ===================================
+[31m[1m_______________________ test_Catalog_duplicated_message ________________________[0m
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92mtest_Catalog_duplicated_message[39;49;00m():[90m[39;49;00m
+        catalog = Catalog()[90m[39;49;00m
+        catalog.add([33m'[39;49;00m[33mhello[39;49;00m[33m'[39;49;00m, MsgOrigin([33m'[39;49;00m[33m/path/to/filename[39;49;00m[33m'[39;49;00m, [94m1[39;49;00m))[90m[39;49;00m
+        catalog.add([33m'[39;49;00m[33mhello[39;49;00m[33m'[39;49;00m, MsgOrigin([33m'[39;49;00m[33m/path/to/filename[39;49;00m[33m'[39;49;00m, [94m1[39;49;00m))[90m[39;49;00m
+        catalog.add([33m'[39;49;00m[33mhello[39;49;00m[33m'[39;49;00m, MsgOrigin([33m'[39;49;00m[33m/path/to/filename[39;49;00m[33m'[39;49;00m, [94m2[39;49;00m))[90m[39;49;00m
+        catalog.add([33m'[39;49;00m[33mhello[39;49;00m[33m'[39;49;00m, MsgOrigin([33m'[39;49;00m[33m/path/to/yetanother[39;49;00m[33m'[39;49;00m, [94m1[39;49;00m))[90m[39;49;00m
+        catalog.add([33m'[39;49;00m[33mworld[39;49;00m[33m'[39;49;00m, MsgOrigin([33m'[39;49;00m[33m/path/to/filename[39;49;00m[33m'[39;49;00m, [94m1[39;49;00m))[90m[39;49;00m
+    [90m[39;49;00m
+        [94massert[39;49;00m [96mlen[39;49;00m([96mlist[39;49;00m(catalog)) == [94m2[39;49;00m[90m[39;49;00m
+    [90m[39;49;00m
+        msg1, msg2 = [96mlist[39;49;00m(catalog)[90m[39;49;00m
+        [94massert[39;49;00m msg1.text == [33m'[39;49;00m[33mhello[39;49;00m[33m'[39;49;00m[90m[39;49;00m
+>       [94massert[39;49;00m msg1.locations == [([33m'[39;49;00m[33m/path/to/filename[39;49;00m[33m'[39;49;00m, [94m1[39;49;00m),[90m[39;49;00m
+                                  ([33m'[39;49;00m[33m/path/to/filename[39;49;00m[33m'[39;49;00m, [94m2[39;49;00m),[90m[39;49;00m
+                                  ([33m'[39;49;00m[33m/path/to/yetanother[39;49;00m[33m'[39;49;00m, [94m1[39;49;00m)][90m[39;49;00m
+[1m[31mE       AssertionError: assert [('/path/to/y...filename', 2)] == [('/path/to/f...tanother', 1)][0m
+[1m[31mE         [0m
+[1m[31mE         At index 0 diff: [0m([33m'[39;49;00m[33m/path/to/yetanother[39;49;00m[33m'[39;49;00m, [94m1[39;49;00m)[90m[39;49;00m != [0m([33m'[39;49;00m[33m/path/to/filename[39;49;00m[33m'[39;49;00m, [94m1[39;49;00m)[90m[39;49;00m[0m
+[1m[31mE         Use -v to get more diff[0m
+
+[1m[31mtests/test_build_gettext.py[0m:27: AssertionError
 [31m[1m____________________________ test_build_single_pot _____________________________[0m
 
 app = <SphinxTestApp buildername='gettext'>
@@ -551,7 +518,7 @@ app = <SphinxTestApp buildername='gettext'>
 [01mlooking for now-outdated files... [39;49;00mnone found
 [01mpreparing documents... [39;49;00mdone
 [01mwriting output... [39;49;00m[  6%] [32mautodoc[39;49;00m                                               [01mwriting output... [39;49;00m[ 13%] [32mbom[39;49;00m                                                   [01mwriting output... [39;49;00m[ 20%] [32mextapi[39;49;00m                                                [01mwriting output... [39;49;00m[ 26%] [32mextensions[39;49;00m                                            [01mwriting output... [39;49;00m[ 33%] [32mfootnote[39;49;00m                                              [01mwriting output... [39;49;00m[ 40%] [32mimages[39;49;00m                                                [01mwriting output... [39;49;00m[ 46%] [32mincludes[39;49;00m                                              [01mwriting output... [39;49;00m[ 53%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 60%] [32mlists[39;49;00m                                                 [01mwriting output... [39;49;00m[ 66%] [32mmarkup[39;49;00m                                                [01mwriting output... [39;49;00m[ 73%] [32mmath[39;49;00m                                                  [01mwriting output... [39;49;00m[ 80%] [32mobjects[39;49;00m                                               [01mwriting output... [39;49;00m[ 86%] [32motherext[39;49;00m                                              [01mwriting output... [39;49;00m[ 93%] [32msubdir/images[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32msubdir/includes[39;49;00m                                       
-[01mwriting message catalogs... [39;49;00m[  7%] [32mautodoc .. <sphinx.builders.gettext.Catalog object at 0x712df51f0640>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 14%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x712df489e140>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 21%] [32mextapi .. <sphinx.builders.gettext.Catalog object at 0x712df4893910>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 28%] [32mextensions .. <sphinx.builders.gettext.Catalog object at 0x712df48ba780>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 35%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x712df49592d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 42%] [32mimages .. <sphinx.builders.gettext.Catalog object at 0x712df4941be0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32mincludes .. <sphinx.builders.gettext.Catalog object at 0x712df4939280>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 57%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x712df4d474b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 64%] [32mlists .. <sphinx.builders.gettext.Catalog object at 0x712df4893fa0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 71%] [32mmarkup .. <sphinx.builders.gettext.Catalog object at 0x712df4eb6410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 78%] [32mmath .. <sphinx.builders.gettext.Catalog object at 0x712df4892640>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 85%] [32mobjects .. <sphinx.builders.gettext.Catalog object at 0x712df5222d20>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 92%] [32motherext .. <sphinx.builders.gettext.Catalog object at 0x712df4bfef50>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32msubdir .. <sphinx.builders.gettext.Catalog object at 0x712df5595690>[39;49;00m
+[01mwriting message catalogs... [39;49;00m[  7%] [32mautodoc .. <sphinx.builders.gettext.Catalog object at 0x72bd9c0af730>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 14%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x72bd9c40d280>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 21%] [32mextapi .. <sphinx.builders.gettext.Catalog object at 0x72bd9c407460>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 28%] [32mextensions .. <sphinx.builders.gettext.Catalog object at 0x72bd9c407910>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 35%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x72bd9c4064b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 42%] [32mimages .. <sphinx.builders.gettext.Catalog object at 0x72bd9c43fc80>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32mincludes .. <sphinx.builders.gettext.Catalog object at 0x72bd9c41b410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 57%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x72bd9bbf5280>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 64%] [32mlists .. <sphinx.builders.gettext.Catalog object at 0x72bd9c40bc80>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 71%] [32mmarkup .. <sphinx.builders.gettext.Catalog object at 0x72bd9c480d70>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 78%] [32mmath .. <sphinx.builders.gettext.Catalog object at 0x72bd9c415730>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 85%] [32mobjects .. <sphinx.builders.gettext.Catalog object at 0x72bd9c391f00>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 92%] [32motherext .. <sphinx.builders.gettext.Catalog object at 0x72bd9c6c48c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32msubdir .. <sphinx.builders.gettext.Catalog object at 0x72bd9c300c30>[39;49;00m
 
 # warning: 
 [91m/tmp/pytest-of-root/pytest-0/root-gettext/objects.txt:143: WARNING: Unparseable C cross-reference: 'SphinxType *'
@@ -577,7 +544,7 @@ Invalid C declaration: Expected end of definition. [error at 11]
 [01mchecking consistency... [39;49;00mdone
 [01mpreparing documents... [39;49;00mdone
 [01mwriting output... [39;49;00m[  6%] [32mautodoc[39;49;00m                                               [01mwriting output... [39;49;00m[ 13%] [32mbom[39;49;00m                                                   [01mwriting output... [39;49;00m[ 20%] [32mextapi[39;49;00m                                                [01mwriting output... [39;49;00m[ 26%] [32mextensions[39;49;00m                                            [01mwriting output... [39;49;00m[ 33%] [32mfootnote[39;49;00m                                              [01mwriting output... [39;49;00m[ 40%] [32mimages[39;49;00m                                                [01mwriting output... [39;49;00m[ 46%] [32mincludes[39;49;00m                                              [01mwriting output... [39;49;00m[ 53%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 60%] [32mlists[39;49;00m                                                 [01mwriting output... [39;49;00m[ 66%] [32mmarkup[39;49;00m                                                [01mwriting output... [39;49;00m[ 73%] [32mmath[39;49;00m                                                  [01mwriting output... [39;49;00m[ 80%] [32mobjects[39;49;00m                                               [01mwriting output... [39;49;00m[ 86%] [32motherext[39;49;00m                                              [01mwriting output... [39;49;00m[ 93%] [32msubdir/images[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32msubdir/includes[39;49;00m                                       
-[01mwriting message catalogs... [39;49;00m[  7%] [32mautodoc .. <sphinx.builders.gettext.Catalog object at 0x712df5060f50>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 14%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x712df51d3c80>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 21%] [32mextapi .. <sphinx.builders.gettext.Catalog object at 0x712df51fe6e0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 28%] [32mextensions .. <sphinx.builders.gettext.Catalog object at 0x712df53b7dc0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 35%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x712df53c5e60>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 42%] [32mimages .. <sphinx.builders.gettext.Catalog object at 0x712df51d3c30>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32mincludes .. <sphinx.builders.gettext.Catalog object at 0x712df5223730>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 57%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x712df5175d70>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 64%] [32mlists .. <sphinx.builders.gettext.Catalog object at 0x712df50258c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 71%] [32mmarkup .. <sphinx.builders.gettext.Catalog object at 0x712df50acf50>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 78%] [32mmath .. <sphinx.builders.gettext.Catalog object at 0x712df5778e60>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 85%] [32mobjects .. <sphinx.builders.gettext.Catalog object at 0x712df4984cd0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 92%] [32motherext .. <sphinx.builders.gettext.Catalog object at 0x712df4889d20>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32msubdir .. <sphinx.builders.gettext.Catalog object at 0x712df4810730>[39;49;00m
+[01mwriting message catalogs... [39;49;00m[  7%] [32mautodoc .. <sphinx.builders.gettext.Catalog object at 0x72bd9cae9e10>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 14%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca6b3c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 21%] [32mextapi .. <sphinx.builders.gettext.Catalog object at 0x72bd9c494370>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 28%] [32mextensions .. <sphinx.builders.gettext.Catalog object at 0x72bd9c54af50>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 35%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x72bd9c6b8820>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 42%] [32mimages .. <sphinx.builders.gettext.Catalog object at 0x72bd9c59d370>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32mincludes .. <sphinx.builders.gettext.Catalog object at 0x72bd9cab94b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 57%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x72bd9ccc4c30>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 64%] [32mlists .. <sphinx.builders.gettext.Catalog object at 0x72bd9c7a6550>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 71%] [32mmarkup .. <sphinx.builders.gettext.Catalog object at 0x72bd9cae0320>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 78%] [32mmath .. <sphinx.builders.gettext.Catalog object at 0x72bd9bd513c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 85%] [32mobjects .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc81d70>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 92%] [32motherext .. <sphinx.builders.gettext.Catalog object at 0x72bd9bd80550>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32msubdir .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc109b0>[39;49;00m
 
 # warning: 
 [91m/tmp/pytest-of-root/pytest-0/root-gettext/autodoc_target.py:docstring of autodoc_target.Class:1: WARNING: duplicate object description of autodoc_target.Class, other instance in autodoc, use :noindex: for one of them[39;49;00m
@@ -619,7 +586,7 @@ Invalid C declaration: Expected end of definition. [error at 11]
 [01mchecking consistency... [39;49;00mdone
 [01mpreparing documents... [39;49;00mdone
 [01mwriting output... [39;49;00m[  3%] [32madmonitions[39;49;00m                                           [01mwriting output... [39;49;00m[  6%] [32mbom[39;49;00m                                                   [01mwriting output... [39;49;00m[ 10%] [32mdefinition_terms[39;49;00m                                      [01mwriting output... [39;49;00m[ 13%] [32mdocfields[39;49;00m                                             [01mwriting output... [39;49;00m[ 17%] [32mexternal_links[39;49;00m                                        [01mwriting output... [39;49;00m[ 20%] [32mfigure[39;49;00m                                                [01mwriting output... [39;49;00m[ 24%] [32mfootnote[39;49;00m                                              [01mwriting output... [39;49;00m[ 27%] [32mglossary_terms[39;49;00m                                        [01mwriting output... [39;49;00m[ 31%] [32mglossary_terms_inconsistency[39;49;00m                          [01mwriting output... [39;49;00m[ 34%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 37%] [32mindex_entries[39;49;00m                                         [01mwriting output... [39;49;00m[ 41%] [32mlabel_target[39;49;00m                                          [01mwriting output... [39;49;00m[ 44%] [32mliteralblock[39;49;00m                                          [01mwriting output... [39;49;00m[ 48%] [32mnoqa[39;49;00m                                                  [01mwriting output... [39;49;00m[ 51%] [32monly[39;49;00m                                                  [01mwriting output... [39;49;00m[ 55%] [32mraw[39;49;00m                                                   [01mwriting output... [39;49;00m[ 58%] [32mrefs[39;49;00m                                                  [01mwriting output... [39;49;00m[ 62%] [32mrefs_inconsistency[39;49;00m                                    [01mwriting output... [39;49;00m[ 65%] [32mrefs_python_domain[39;49;00m                                    [01mwriting output... [39;49;00m[ 68%] [32mrole_xref[39;49;00m                                             [01mwriting output... [39;49;00m[ 72%] [32mrubric[39;49;00m                                                [01mwriting output... [39;49;00m[ 75%] [32msection[39;49;00m                                               [01mwriting output... [39;49;00m[ 79%] [32mseealso[39;49;00m                                               [01mwriting output... [39;49;00m[ 82%] [32msubdir/index[39;49;00m                                          [01mwriting output... [39;49;00m[ 86%] [32mtable[39;49;00m                                                 [01mwriting output... [39;49;00m[ 89%] [32mtoctree[39;49;00m                                               [01mwriting output... [39;49;00m[ 93%] [32mtopic[39;49;00m                                                 [01mwriting output... [39;49;00m[ 96%] [32mversionchange[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32mwarnings[39;49;00m                                              
-[01mwriting message catalogs... [39;49;00m[  3%] [32madmonitions .. <sphinx.builders.gettext.Catalog object at 0x712df5618b90>[39;49;00m[01mwriting message catalogs... [39;49;00m[  6%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x712df5763fa0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 10%] [32mdefinition_terms .. <sphinx.builders.gettext.Catalog object at 0x712df57860f0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 13%] [32mdocfields .. <sphinx.builders.gettext.Catalog object at 0x712df56444b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 16%] [32mexternal_links .. <sphinx.builders.gettext.Catalog object at 0x712df53f7410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 20%] [32mfigure .. <sphinx.builders.gettext.Catalog object at 0x712df52d3b90>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 23%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x712df4fef5f0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 26%] [32mglossary_terms .. <sphinx.builders.gettext.Catalog object at 0x712df4980640>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 30%] [32mglossary_terms_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x712df48c1140>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 33%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x712df5e061e0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 36%] [32mindex_entries .. <sphinx.builders.gettext.Catalog object at 0x712df4983820>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 40%] [32mlabel_target .. <sphinx.builders.gettext.Catalog object at 0x712df52568c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 43%] [32mliteralblock .. <sphinx.builders.gettext.Catalog object at 0x712df502d690>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 46%] [32mnoqa .. <sphinx.builders.gettext.Catalog object at 0x712df53e0690>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32monly .. <sphinx.builders.gettext.Catalog object at 0x712df5879690>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 53%] [32mraw .. <sphinx.builders.gettext.Catalog object at 0x712df53d62d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 56%] [32mrefs .. <sphinx.builders.gettext.Catalog object at 0x712df5440820>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 60%] [32mrefs_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x712df5644e60>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 63%] [32mrefs_python_domain .. <sphinx.builders.gettext.Catalog object at 0x712df55ebf50>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 66%] [32mrole_xref .. <sphinx.builders.gettext.Catalog object at 0x712df4977aa0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 70%] [32mrubric .. <sphinx.builders.gettext.Catalog object at 0x712df480e410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 73%] [32msection .. <sphinx.builders.gettext.Catalog object at 0x712df47b68c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 76%] [32mseealso .. <sphinx.builders.gettext.Catalog object at 0x712df4909780>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 80%] [32msphinx .. <sphinx.builders.gettext.Catalog object at 0x712df527e640>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 83%] [32msubdir/index .. <sphinx.builders.gettext.Catalog object at 0x712df4894f00>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 86%] [32mtable .. <sphinx.builders.gettext.Catalog object at 0x712df48ba3c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 90%] [32mtoctree .. <sphinx.builders.gettext.Catalog object at 0x712df48af410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 93%] [32mtopic .. <sphinx.builders.gettext.Catalog object at 0x712df5812cd0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 96%] [32mversionchange .. <sphinx.builders.gettext.Catalog object at 0x712df5828280>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32mwarnings .. <sphinx.builders.gettext.Catalog object at 0x712df48381e0>[39;49;00m
+[01mwriting message catalogs... [39;49;00m[  3%] [32msphinx .. <sphinx.builders.gettext.Catalog object at 0x72bd9caeeb40>[39;49;00m[01mwriting message catalogs... [39;49;00m[  6%] [32madmonitions .. <sphinx.builders.gettext.Catalog object at 0x72bd9bd6fd20>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 10%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca1ae60>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 13%] [32mdefinition_terms .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca8f500>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 16%] [32mdocfields .. <sphinx.builders.gettext.Catalog object at 0x72bd9caf3690>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 20%] [32mexternal_links .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca61e10>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 23%] [32mfigure .. <sphinx.builders.gettext.Catalog object at 0x72bd9c726230>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 26%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x72bd9c609960>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 30%] [32mglossary_terms .. <sphinx.builders.gettext.Catalog object at 0x72bd9d137280>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 33%] [32mglossary_terms_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x72bd9cbc2b40>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 36%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x72bd9cbef5a0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 40%] [32mindex_entries .. <sphinx.builders.gettext.Catalog object at 0x72bd9ce028c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 43%] [32mlabel_target .. <sphinx.builders.gettext.Catalog object at 0x72bd9cb2a2d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 46%] [32mliteralblock .. <sphinx.builders.gettext.Catalog object at 0x72bd9c6dee60>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32mnoqa .. <sphinx.builders.gettext.Catalog object at 0x72bd9c83be60>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 53%] [32monly .. <sphinx.builders.gettext.Catalog object at 0x72bd9c845640>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 56%] [32mraw .. <sphinx.builders.gettext.Catalog object at 0x72bd9c72ee10>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 60%] [32mrefs .. <sphinx.builders.gettext.Catalog object at 0x72bd9c898f50>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 63%] [32mrefs_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca61230>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 66%] [32mrefs_python_domain .. <sphinx.builders.gettext.Catalog object at 0x72bd9c8227d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 70%] [32mrole_xref .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca11b40>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 73%] [32mrubric .. <sphinx.builders.gettext.Catalog object at 0x72bd9c173190>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 76%] [32msection .. <sphinx.builders.gettext.Catalog object at 0x72bd9c175640>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 80%] [32mseealso .. <sphinx.builders.gettext.Catalog object at 0x72bd9c1755f0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 83%] [32msubdir/index .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc970a0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 86%] [32mtable .. <sphinx.builders.gettext.Catalog object at 0x72bd9c173550>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 90%] [32mtoctree .. <sphinx.builders.gettext.Catalog object at 0x72bd9c175b90>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 93%] [32mtopic .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca4baf0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 96%] [32mversionchange .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc56140>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32mwarnings .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc688c0>[39;49;00m
 
 # warning: 
 [31m/tmp/pytest-of-root/pytest-0/gettext/label_target.txt:41: ERROR: Duplicate target name, cannot be used as a unique reference: "duplicated sub section".[39;49;00m
@@ -648,7 +615,7 @@ Invalid C declaration: Expected end of definition. [error at 11]
 [01mchecking consistency... [39;49;00mdone
 [01mpreparing documents... [39;49;00mdone
 [01mwriting output... [39;49;00m[  3%] [32madmonitions[39;49;00m                                           [01mwriting output... [39;49;00m[  6%] [32mbom[39;49;00m                                                   [01mwriting output... [39;49;00m[ 10%] [32mdefinition_terms[39;49;00m                                      [01mwriting output... [39;49;00m[ 13%] [32mdocfields[39;49;00m                                             [01mwriting output... [39;49;00m[ 17%] [32mexternal_links[39;49;00m                                        [01mwriting output... [39;49;00m[ 20%] [32mfigure[39;49;00m                                                [01mwriting output... [39;49;00m[ 24%] [32mfootnote[39;49;00m                                              [01mwriting output... [39;49;00m[ 27%] [32mglossary_terms[39;49;00m                                        [01mwriting output... [39;49;00m[ 31%] [32mglossary_terms_inconsistency[39;49;00m                          [01mwriting output... [39;49;00m[ 34%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 37%] [32mindex_entries[39;49;00m                                         [01mwriting output... [39;49;00m[ 41%] [32mlabel_target[39;49;00m                                          [01mwriting output... [39;49;00m[ 44%] [32mliteralblock[39;49;00m                                          [01mwriting output... [39;49;00m[ 48%] [32mnoqa[39;49;00m                                                  [01mwriting output... [39;49;00m[ 51%] [32monly[39;49;00m                                                  [01mwriting output... [39;49;00m[ 55%] [32mraw[39;49;00m                                                   [01mwriting output... [39;49;00m[ 58%] [32mrefs[39;49;00m                                                  [01mwriting output... [39;49;00m[ 62%] [32mrefs_inconsistency[39;49;00m                                    [01mwriting output... [39;49;00m[ 65%] [32mrefs_python_domain[39;49;00m                                    [01mwriting output... [39;49;00m[ 68%] [32mrole_xref[39;49;00m                                             [01mwriting output... [39;49;00m[ 72%] [32mrubric[39;49;00m                                                [01mwriting output... [39;49;00m[ 75%] [32msection[39;49;00m                                               [01mwriting output... [39;49;00m[ 79%] [32mseealso[39;49;00m                                               [01mwriting output... [39;49;00m[ 82%] [32msubdir/index[39;49;00m                                          [01mwriting output... [39;49;00m[ 86%] [32mtable[39;49;00m                                                 [01mwriting output... [39;49;00m[ 89%] [32mtoctree[39;49;00m                                               [01mwriting output... [39;49;00m[ 93%] [32mtopic[39;49;00m                                                 [01mwriting output... [39;49;00m[ 96%] [32mversionchange[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32mwarnings[39;49;00m                                              
-[01mwriting message catalogs... [39;49;00m[  3%] [32madmonitions .. <sphinx.builders.gettext.Catalog object at 0x712df5905230>[39;49;00m[01mwriting message catalogs... [39;49;00m[  6%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x712df5c67fa0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 10%] [32mdefinition_terms .. <sphinx.builders.gettext.Catalog object at 0x712df57d6b40>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 13%] [32mdocfields .. <sphinx.builders.gettext.Catalog object at 0x712df50f37d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 16%] [32mexternal_links .. <sphinx.builders.gettext.Catalog object at 0x712df4882fa0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 20%] [32mfigure .. <sphinx.builders.gettext.Catalog object at 0x712df4975910>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 23%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x712df4863c80>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 26%] [32mglossary_terms .. <sphinx.builders.gettext.Catalog object at 0x712df497b690>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 30%] [32mglossary_terms_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x712df6922f00>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 33%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x712df59ae820>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 36%] [32mindex_entries .. <sphinx.builders.gettext.Catalog object at 0x712df51ccf50>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 40%] [32mlabel_target .. <sphinx.builders.gettext.Catalog object at 0x712df48a75a0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 43%] [32mliteralblock .. <sphinx.builders.gettext.Catalog object at 0x712df594a870>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 46%] [32mnoqa .. <sphinx.builders.gettext.Catalog object at 0x712df5881780>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32monly .. <sphinx.builders.gettext.Catalog object at 0x712df55ee140>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 53%] [32mraw .. <sphinx.builders.gettext.Catalog object at 0x712df5118af0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 56%] [32mrefs .. <sphinx.builders.gettext.Catalog object at 0x712df5118730>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 60%] [32mrefs_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x712df48b1370>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 63%] [32mrefs_python_domain .. <sphinx.builders.gettext.Catalog object at 0x712df5587410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 66%] [32mrole_xref .. <sphinx.builders.gettext.Catalog object at 0x712df69bbdc0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 70%] [32mrubric .. <sphinx.builders.gettext.Catalog object at 0x712df48d1eb0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 73%] [32msection .. <sphinx.builders.gettext.Catalog object at 0x712df50f3280>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 76%] [32mseealso .. <sphinx.builders.gettext.Catalog object at 0x712df54076e0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 80%] [32msphinx .. <sphinx.builders.gettext.Catalog object at 0x712df55d8a50>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 83%] [32msubdir/index .. <sphinx.builders.gettext.Catalog object at 0x712df497b140>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 86%] [32mtable .. <sphinx.builders.gettext.Catalog object at 0x712df50f3d70>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 90%] [32mtoctree .. <sphinx.builders.gettext.Catalog object at 0x712df5bb47d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 93%] [32mtopic .. <sphinx.builders.gettext.Catalog object at 0x712df494f500>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 96%] [32mversionchange .. <sphinx.builders.gettext.Catalog object at 0x712df4cba640>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32mwarnings .. <sphinx.builders.gettext.Catalog object at 0x712df5947370>[39;49;00m
+[01mwriting message catalogs... [39;49;00m[  3%] [32msphinx .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc51190>[39;49;00m[01mwriting message catalogs... [39;49;00m[  6%] [32madmonitions .. <sphinx.builders.gettext.Catalog object at 0x72bd9cb2d500>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 10%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca69410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 13%] [32mdefinition_terms .. <sphinx.builders.gettext.Catalog object at 0x72bd9bd70960>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 16%] [32mdocfields .. <sphinx.builders.gettext.Catalog object at 0x72bd9d04b8c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 20%] [32mexternal_links .. <sphinx.builders.gettext.Catalog object at 0x72bd9de4dd20>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 23%] [32mfigure .. <sphinx.builders.gettext.Catalog object at 0x72bd9c43e500>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 26%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc04cd0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 30%] [32mglossary_terms .. <sphinx.builders.gettext.Catalog object at 0x72bd9cd9c500>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 33%] [32mglossary_terms_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc80b90>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 36%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x72bd9cd89730>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 40%] [32mindex_entries .. <sphinx.builders.gettext.Catalog object at 0x72bd9d0253c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 43%] [32mlabel_target .. <sphinx.builders.gettext.Catalog object at 0x72bd9cd71e10>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 46%] [32mliteralblock .. <sphinx.builders.gettext.Catalog object at 0x72bd9c43eb90>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32mnoqa .. <sphinx.builders.gettext.Catalog object at 0x72bd9bd7f280>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 53%] [32monly .. <sphinx.builders.gettext.Catalog object at 0x72bd9c439280>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 56%] [32mraw .. <sphinx.builders.gettext.Catalog object at 0x72bd9bd7f320>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 60%] [32mrefs .. <sphinx.builders.gettext.Catalog object at 0x72bd9c4348c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 63%] [32mrefs_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x72bd9bbf7910>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 66%] [32mrefs_python_domain .. <sphinx.builders.gettext.Catalog object at 0x72bd9d157730>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 70%] [32mrole_xref .. <sphinx.builders.gettext.Catalog object at 0x72bd9bc8b0f0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 73%] [32mrubric .. <sphinx.builders.gettext.Catalog object at 0x72bd9c784550>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 76%] [32msection .. <sphinx.builders.gettext.Catalog object at 0x72bd9c6090a0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 80%] [32mseealso .. <sphinx.builders.gettext.Catalog object at 0x72bd9c175280>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 83%] [32msubdir/index .. <sphinx.builders.gettext.Catalog object at 0x72bd9caecb40>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 86%] [32mtable .. <sphinx.builders.gettext.Catalog object at 0x72bd9cb0d190>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 90%] [32mtoctree .. <sphinx.builders.gettext.Catalog object at 0x72bd9caec2d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 93%] [32mtopic .. <sphinx.builders.gettext.Catalog object at 0x72bd9cc12e60>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 96%] [32mversionchange .. <sphinx.builders.gettext.Catalog object at 0x72bd9cd76230>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32mwarnings .. <sphinx.builders.gettext.Catalog object at 0x72bd9c3bcfa0>[39;49;00m
 
 # warning: 
 [31m/tmp/pytest-of-root/pytest-0/gettext/label_target.txt:41: ERROR: Duplicate target name, cannot be used as a unique reference: "duplicated sub section".[39;49;00m
@@ -678,7 +645,7 @@ Invalid C declaration: Expected end of definition. [error at 11]
 [01mchecking consistency... [39;49;00mdone
 [01mpreparing documents... [39;49;00mdone
 [01mwriting output... [39;49;00m[  3%] [32madmonitions[39;49;00m                                           [01mwriting output... [39;49;00m[  6%] [32mbom[39;49;00m                                                   [01mwriting output... [39;49;00m[ 10%] [32mdefinition_terms[39;49;00m                                      [01mwriting output... [39;49;00m[ 13%] [32mdocfields[39;49;00m                                             [01mwriting output... [39;49;00m[ 17%] [32mexternal_links[39;49;00m                                        [01mwriting output... [39;49;00m[ 20%] [32mfigure[39;49;00m                                                [01mwriting output... [39;49;00m[ 24%] [32mfootnote[39;49;00m                                              [01mwriting output... [39;49;00m[ 27%] [32mglossary_terms[39;49;00m                                        [01mwriting output... [39;49;00m[ 31%] [32mglossary_terms_inconsistency[39;49;00m                          [01mwriting output... [39;49;00m[ 34%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 37%] [32mindex_entries[39;49;00m                                         [01mwriting output... [39;49;00m[ 41%] [32mlabel_target[39;49;00m                                          [01mwriting output... [39;49;00m[ 44%] [32mliteralblock[39;49;00m                                          [01mwriting output... [39;49;00m[ 48%] [32mnoqa[39;49;00m                                                  [01mwriting output... [39;49;00m[ 51%] [32monly[39;49;00m                                                  [01mwriting output... [39;49;00m[ 55%] [32mraw[39;49;00m                                                   [01mwriting output... [39;49;00m[ 58%] [32mrefs[39;49;00m                                                  [01mwriting output... [39;49;00m[ 62%] [32mrefs_inconsistency[39;49;00m                                    [01mwriting output... [39;49;00m[ 65%] [32mrefs_python_domain[39;49;00m                                    [01mwriting output... [39;49;00m[ 68%] [32mrole_xref[39;49;00m                                             [01mwriting output... [39;49;00m[ 72%] [32mrubric[39;49;00m                                                [01mwriting output... [39;49;00m[ 75%] [32msection[39;49;00m                                               [01mwriting output... [39;49;00m[ 79%] [32mseealso[39;49;00m                                               [01mwriting output... [39;49;00m[ 82%] [32msubdir/index[39;49;00m                                          [01mwriting output... [39;49;00m[ 86%] [32mtable[39;49;00m                                                 [01mwriting output... [39;49;00m[ 89%] [32mtoctree[39;49;00m                                               [01mwriting output... [39;49;00m[ 93%] [32mtopic[39;49;00m                                                 [01mwriting output... [39;49;00m[ 96%] [32mversionchange[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32mwarnings[39;49;00m                                              
-[01mwriting message catalogs... [39;49;00m[  3%] [32madmonitions .. <sphinx.builders.gettext.Catalog object at 0x712df4e664b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[  6%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x712df4e4b5a0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 10%] [32mdefinition_terms .. <sphinx.builders.gettext.Catalog object at 0x712df4e58eb0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 13%] [32mdocfields .. <sphinx.builders.gettext.Catalog object at 0x712df4e57870>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 16%] [32mexternal_links .. <sphinx.builders.gettext.Catalog object at 0x712df4926fa0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 20%] [32mfigure .. <sphinx.builders.gettext.Catalog object at 0x712df493e820>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 23%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x712df4916230>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 26%] [32mglossary_terms .. <sphinx.builders.gettext.Catalog object at 0x712df5123460>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 30%] [32mglossary_terms_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x712df4924230>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 33%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x712df4987370>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 36%] [32mindex_entries .. <sphinx.builders.gettext.Catalog object at 0x712df485c230>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 40%] [32mlabel_target .. <sphinx.builders.gettext.Catalog object at 0x712df5814b90>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 43%] [32mliteralblock .. <sphinx.builders.gettext.Catalog object at 0x712df59fbeb0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 46%] [32mnoqa .. <sphinx.builders.gettext.Catalog object at 0x712df6a28410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32monly .. <sphinx.builders.gettext.Catalog object at 0x712df52e54b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 53%] [32mraw .. <sphinx.builders.gettext.Catalog object at 0x712df5c874b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 56%] [32mrefs .. <sphinx.builders.gettext.Catalog object at 0x712df5dbc460>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 60%] [32mrefs_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x712df581c2d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 63%] [32mrefs_python_domain .. <sphinx.builders.gettext.Catalog object at 0x712df6418960>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 66%] [32mrole_xref .. <sphinx.builders.gettext.Catalog object at 0x712df53852d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 70%] [32mrubric .. <sphinx.builders.gettext.Catalog object at 0x712df49799b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 73%] [32msection .. <sphinx.builders.gettext.Catalog object at 0x712df563d7d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 76%] [32mseealso .. <sphinx.builders.gettext.Catalog object at 0x712df4979370>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 80%] [32msphinx .. <sphinx.builders.gettext.Catalog object at 0x712df4d05f00>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 83%] [32msubdir .. <sphinx.builders.gettext.Catalog object at 0x712df55ebb40>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 86%] [32mtable .. <sphinx.builders.gettext.Catalog object at 0x712df558f5a0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 90%] [32mtoctree .. <sphinx.builders.gettext.Catalog object at 0x712df6a62230>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 93%] [32mtopic .. <sphinx.builders.gettext.Catalog object at 0x712df6fa7500>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 96%] [32mversionchange .. <sphinx.builders.gettext.Catalog object at 0x712df483baf0>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32mwarnings .. <sphinx.builders.gettext.Catalog object at 0x712df551d730>[39;49;00m
+[01mwriting message catalogs... [39;49;00m[  3%] [32msphinx .. <sphinx.builders.gettext.Catalog object at 0x72bd9cd762d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[  6%] [32madmonitions .. <sphinx.builders.gettext.Catalog object at 0x72bd9ceafe10>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 10%] [32mbom .. <sphinx.builders.gettext.Catalog object at 0x72bd9ceafc30>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 13%] [32mdefinition_terms .. <sphinx.builders.gettext.Catalog object at 0x72bd9cd9a960>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 16%] [32mdocfields .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca48910>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 20%] [32mexternal_links .. <sphinx.builders.gettext.Catalog object at 0x72bd9c37e190>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 23%] [32mfigure .. <sphinx.builders.gettext.Catalog object at 0x72bd9ccd0d70>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 26%] [32mfootnote .. <sphinx.builders.gettext.Catalog object at 0x72bd9c0ae140>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 30%] [32mglossary_terms .. <sphinx.builders.gettext.Catalog object at 0x72bd9c8bd370>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 33%] [32mglossary_terms_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x72bd9c8b70a0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 36%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x72bd9c489550>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 40%] [32mindex_entries .. <sphinx.builders.gettext.Catalog object at 0x72bd9d03a910>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 43%] [32mlabel_target .. <sphinx.builders.gettext.Catalog object at 0x72bd9c8a3190>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 46%] [32mliteralblock .. <sphinx.builders.gettext.Catalog object at 0x72bd9ccc7af0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 50%] [32mnoqa .. <sphinx.builders.gettext.Catalog object at 0x72bd9bd78d20>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 53%] [32monly .. <sphinx.builders.gettext.Catalog object at 0x72bd9cb8cc30>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 56%] [32mraw .. <sphinx.builders.gettext.Catalog object at 0x72bd9c88f7d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 60%] [32mrefs .. <sphinx.builders.gettext.Catalog object at 0x72bd9cbf05f0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 63%] [32mrefs_inconsistency .. <sphinx.builders.gettext.Catalog object at 0x72bd9ccd08c0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 66%] [32mrefs_python_domain .. <sphinx.builders.gettext.Catalog object at 0x72bd9ccd0410>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 70%] [32mrole_xref .. <sphinx.builders.gettext.Catalog object at 0x72bd9cdfadc0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 73%] [32mrubric .. <sphinx.builders.gettext.Catalog object at 0x72bd9cc381e0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 76%] [32msection .. <sphinx.builders.gettext.Catalog object at 0x72bd9c7fe910>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 80%] [32mseealso .. <sphinx.builders.gettext.Catalog object at 0x72bd9cab34b0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 83%] [32msubdir .. <sphinx.builders.gettext.Catalog object at 0x72bd9c4b9e60>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 86%] [32mtable .. <sphinx.builders.gettext.Catalog object at 0x72bd9cbf96e0>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 90%] [32mtoctree .. <sphinx.builders.gettext.Catalog object at 0x72bd9caa1c80>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 93%] [32mtopic .. <sphinx.builders.gettext.Catalog object at 0x72bd9cc0fe10>[39;49;00m[01mwriting message catalogs... [39;49;00m[ 96%] [32mversionchange .. <sphinx.builders.gettext.Catalog object at 0x72bd9ca08d70>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32mwarnings .. <sphinx.builders.gettext.Catalog object at 0x72bd9c495550>[39;49;00m
 
 # warning: 
 [31m/tmp/pytest-of-root/pytest-0/gettext/label_target.txt:41: ERROR: Duplicate target name, cannot be used as a unique reference: "duplicated sub section".[39;49;00m
@@ -707,39 +674,40 @@ Invalid C declaration: Expected end of definition. [error at 11]
 [01mchecking consistency... [39;49;00mdone
 [01mpreparing documents... [39;49;00mdone
 [01mwriting output... [39;49;00m[100%] [32mindex[39;49;00m                                                 
-[01mwriting message catalogs... [39;49;00m[ 50%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x712df5e822d0>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32msphinx .. <sphinx.builders.gettext.Catalog object at 0x712df554c320>[39;49;00m
+[01mwriting message catalogs... [39;49;00m[ 50%] [32msphinx .. <sphinx.builders.gettext.Catalog object at 0x72bd9cad95a0>[39;49;00m[01mwriting message catalogs... [39;49;00m[100%] [32mindex .. <sphinx.builders.gettext.Catalog object at 0x72bd9cbcf870>[39;49;00m
 
 # warning: 
 
 ============================= slowest 25 durations =============================
-0.58s call     tests/test_build_gettext.py::test_build_gettext
-0.42s setup    tests/test_build_gettext.py::test_build_gettext
-0.29s call     tests/test_build_gettext.py::test_gettext_disable_index_entries
-0.28s call     tests/test_build_gettext.py::test_gettext_template
-0.25s call     tests/test_build_gettext.py::test_gettext_index_entries
-0.25s call     tests/test_build_gettext.py::test_msgfmt
-0.17s call     tests/test_build_gettext.py::test_build_single_pot
-0.02s setup    tests/test_build_gettext.py::test_gettext_index_entries
+0.67s call     tests/test_build_gettext.py::test_build_gettext
+0.44s setup    tests/test_build_gettext.py::test_build_gettext
+0.42s call     tests/test_build_gettext.py::test_gettext_disable_index_entries
+0.41s call     tests/test_build_gettext.py::test_gettext_template
+0.37s call     tests/test_build_gettext.py::test_gettext_index_entries
+0.26s call     tests/test_build_gettext.py::test_msgfmt
+0.24s call     tests/test_build_gettext.py::test_build_single_pot
+0.08s setup    tests/test_build_gettext.py::test_msgfmt
+0.04s call     tests/test_build_gettext.py::test_Catalog_duplicated_message
+0.03s setup    tests/test_build_gettext.py::test_gettext_index_entries
 0.02s setup    tests/test_build_gettext.py::test_build_single_pot
-0.02s setup    tests/test_build_gettext.py::test_msgfmt
+0.02s call     tests/test_build_gettext.py::test_gettext_template_msgid_order_in_sphinxpot
+0.01s setup    tests/test_build_gettext.py::test_gettext_template_msgid_order_in_sphinxpot
 0.01s setup    tests/test_build_gettext.py::test_gettext_template
 0.01s setup    tests/test_build_gettext.py::test_gettext_disable_index_entries
-0.01s setup    tests/test_build_gettext.py::test_gettext_template_msgid_order_in_sphinxpot
-0.01s call     tests/test_build_gettext.py::test_gettext_template_msgid_order_in_sphinxpot
 
-(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
 [36m[1m=========================== short test summary info ============================[0m
-[32mPASSED[0m tests/test_build_gettext.py::[1mtest_Catalog_duplicated_message[0m
 [32mPASSED[0m tests/test_build_gettext.py::[1mtest_build_gettext[0m
 [32mPASSED[0m tests/test_build_gettext.py::[1mtest_gettext_index_entries[0m
 [32mPASSED[0m tests/test_build_gettext.py::[1mtest_gettext_disable_index_entries[0m
 [32mPASSED[0m tests/test_build_gettext.py::[1mtest_gettext_template[0m
 [32mPASSED[0m tests/test_build_gettext.py::[1mtest_gettext_template_msgid_order_in_sphinxpot[0m
 [33mSKIPPED[0m [1] tests/test_build_gettext.py:59: Skipped
+[31mFAILED[0m tests/test_build_gettext.py::[1mtest_Catalog_duplicated_message[0m - AssertionError: assert [('/path/to/y...filename', 2)] == [('/path/to/f...ta...
 [31mFAILED[0m tests/test_build_gettext.py::[1mtest_build_single_pot[0m - AssertionError: assert False
-[31m==================== [31m[1m1 failed[0m, [32m6 passed[0m, [33m1 skipped[0m[31m in 2.48s[0m[31m ====================[0m
-py39: exit 1 (2.99 seconds) /testbed> python -X dev -X warn_default_encoding -m pytest -rA --durations 25 tests/test_build_gettext.py pid=111
-  py39: FAIL code 1 (2.99=setup[0.01]+cmd[2.99] seconds)
-  evaluation failed :( (3.09 seconds)
+[31m==================== [31m[1m2 failed[0m, [32m5 passed[0m, [33m1 skipped[0m[31m in 3.16s[0m[31m ====================[0m
+py39: exit 1 (3.91 seconds) /testbed> python -X dev -X warn_default_encoding -m pytest -rA --durations 25 tests/test_build_gettext.py pid=119
+  py39: FAIL code 1 (3.93=setup[0.02]+cmd[3.91] seconds)
+  evaluation failed :( (4.04 seconds)
 + git checkout cab2d93076d0cca7c53fac885f927dde3e2a5fec tests/test_build_gettext.py
 Updated 1 path from 04de92458

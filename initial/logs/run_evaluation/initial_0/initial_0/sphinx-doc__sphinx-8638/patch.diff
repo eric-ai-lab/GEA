@@ -33,3 +33,26 @@ index a0c8ac102..2ef89ef1a 100644
  ]
  
  extras_require = {
+diff --git a/sphinx/domains/python.py.patch b/sphinx/domains/python.py.patch
+new file mode 100644
+index 000000000..aa34f01a3
+--- /dev/null
++++ b/sphinx/domains/python.py.patch
+@@ -0,0 +1,16 @@
++--- python.py.orig
+++++ python.py
++@@ -666,6 +666,12 @@
++         if target[0:1] == '~':
++             target = target[1:]
++             text = target.split('.')[-1]
+++            
+++        # For attribute/variable references, check for explicit class/module qualification
+++        if self._role in ('attr', 'data', 'var'):
+++            if not target.count('.') or not env.ref_context.get('py:class'):
+++                # Only create reference for fully qualified names or class attributes
+++                return None
+++
++         if target[0:1] == '.':
++             # Global reference across modules
++             target = target[1:]
+\ No newline at end of file

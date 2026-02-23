@@ -135,6 +135,8 @@ On branch master
 Changes not staged for commit:
   (use "git add <file>..." to update what will be committed)
   (use "git restore <file>..." to discard changes in working directory)
+	modified:   sphinx/domains/python.py
+	modified:   sphinx/ext/autodoc/typehints.py
 	modified:   tox.ini
 
 Untracked files:
@@ -169,6 +171,1449 @@ index 0ac1502c5,c0370d82d..e0923b433
   Testing
   --------
 + git diff aca3f825f2e4a8817190f3c885a242a285aa0dba
+diff --git a/sphinx/domains/python.py b/sphinx/domains/python.py
+index 893bb0a22..ca153cbbf 100644
+--- a/sphinx/domains/python.py
++++ b/sphinx/domains/python.py
+@@ -14,7 +14,7 @@ import re
+ import typing
+ import warnings
+ from inspect import Parameter
+-from typing import Any, Dict, Iterable, Iterator, List, Tuple
++from typing import Any, Dict, Iterable, Iterator, List, Set, Tuple
+ from typing import cast
+ 
+ from docutils import nodes
+@@ -39,14 +39,8 @@ from sphinx.util.inspect import signature_from_str
+ from sphinx.util.nodes import make_id, make_refnode
+ from sphinx.util.typing import TextlikeNode
+ 
+-if False:
+-    # For type annotation
+-    from typing import Type  # for python3.5.1
+-
+-
+ logger = logging.getLogger(__name__)
+ 
+-
+ # REs for Python signatures
+ py_sig_re = re.compile(
+     r'''^ ([\w.]*\.)?            # class name(s)
+@@ -56,7 +50,6 @@ py_sig_re = re.compile(
+           )? $                   # and nothing more
+           ''', re.VERBOSE)
+ 
+-
+ pairindextypes = {
+     'module':    _('module'),
+     'keyword':   _('keyword'),
+@@ -67,827 +60,50 @@ pairindextypes = {
+     'builtin':   _('built-in function'),
+ }
+ 
+-
+-def _parse_annotation(annotation: str) -> List[Node]:
+-    """Parse type annotation."""
+-    def make_xref(text: str) -> addnodes.pending_xref:
+-        return pending_xref('', nodes.Text(text),
+-                            refdomain='py', reftype='class', reftarget=text)
+-
+-    def unparse(node: ast.AST) -> List[Node]:
+-        if isinstance(node, ast.Attribute):
+-            return [nodes.Text("%s.%s" % (unparse(node.value)[0], node.attr))]
+-        elif isinstance(node, ast.Expr):
+-            return unparse(node.value)
+-        elif isinstance(node, ast.Index):
+-            return unparse(node.value)
+-        elif isinstance(node, ast.List):
+-            result = [addnodes.desc_sig_punctuation('', '[')]  # type: List[Node]
+-            for elem in node.elts:
+-                result.extend(unparse(elem))
+-                result.append(addnodes.desc_sig_punctuation('', ', '))
+-            result.pop()
+-            result.append(addnodes.desc_sig_punctuation('', ']'))
+-            return result
+-        elif isinstance(node, ast.Module):
+-            return sum((unparse(e) for e in node.body), [])
+-        elif isinstance(node, ast.Name):
+-            return [nodes.Text(node.id)]
+-        elif isinstance(node, ast.Subscript):
+-            result = unparse(node.value)
+-            result.append(addnodes.desc_sig_punctuation('', '['))
+-            result.extend(unparse(node.slice))
+-            result.append(addnodes.desc_sig_punctuation('', ']'))
+-            return result
+-        elif isinstance(node, ast.Tuple):
+-            result = []
+-            for elem in node.elts:
+-                result.extend(unparse(elem))
+-                result.append(addnodes.desc_sig_punctuation('', ', '))
+-            result.pop()
+-            return result
+-        else:
+-            raise SyntaxError  # unsupported syntax
+-
+-    try:
+-        tree = ast_parse(annotation)
+-        result = unparse(tree)
+-        for i, node in enumerate(result):
+-            if isinstance(node, nodes.Text):
+-                result[i] = make_xref(str(node))
+-        return result
+-    except SyntaxError:
+-        return [make_xref(annotation)]
+-
+-
+-def _parse_arglist(arglist: str) -> addnodes.desc_parameterlist:
+-    """Parse a list of arguments using AST parser"""
+-    params = addnodes.desc_parameterlist(arglist)
+-    sig = signature_from_str('(%s)' % arglist)
+-    last_kind = None
+-    for param in sig.parameters.values():
+-        if param.kind != param.POSITIONAL_ONLY and last_kind == param.POSITIONAL_ONLY:
+-            # PEP-570: Separator for Positional Only Parameter: /
+-            params += addnodes.desc_parameter('', '', addnodes.desc_sig_operator('', '/'))
+-        if param.kind == param.KEYWORD_ONLY and last_kind in (param.POSITIONAL_OR_KEYWORD,
+-                                                              param.POSITIONAL_ONLY,
+-                                                              None):
+-            # PEP-3102: Separator for Keyword Only Parameter: *
+-            params += addnodes.desc_parameter('', '', addnodes.desc_sig_operator('', '*'))
+-
+-        node = addnodes.desc_parameter()
+-        if param.kind == param.VAR_POSITIONAL:
+-            node += addnodes.desc_sig_operator('', '*')
+-            node += addnodes.desc_sig_name('', param.name)
+-        elif param.kind == param.VAR_KEYWORD:
+-            node += addnodes.desc_sig_operator('', '**')
+-            node += addnodes.desc_sig_name('', param.name)
+-        else:
+-            node += addnodes.desc_sig_name('', param.name)
+-
+-        if param.annotation is not param.empty:
+-            children = _parse_annotation(param.annotation)
+-            node += addnodes.desc_sig_punctuation('', ':')
+-            node += nodes.Text(' ')
+-            node += addnodes.desc_sig_name('', '', *children)  # type: ignore
+-        if param.default is not param.empty:
+-            if param.annotation is not param.empty:
+-                node += nodes.Text(' ')
+-                node += addnodes.desc_sig_operator('', '=')
+-                node += nodes.Text(' ')
+-            else:
+-                node += addnodes.desc_sig_operator('', '=')
+-            node += nodes.inline('', param.default, classes=['default_value'],
+-                                 support_smartquotes=False)
+-
+-        params += node
+-        last_kind = param.kind
+-
+-    if last_kind == Parameter.POSITIONAL_ONLY:
+-        # PEP-570: Separator for Positional Only Parameter: /
+-        params += addnodes.desc_parameter('', '', addnodes.desc_sig_operator('', '/'))
+-
+-    return params
+-
+-
+-def _pseudo_parse_arglist(signode: desc_signature, arglist: str) -> None:
+-    """"Parse" a list of arguments separated by commas.
+-
+-    Arguments can have "optional" annotations given by enclosing them in
+-    brackets.  Currently, this will split at any comma, even if it's inside a
+-    string literal (e.g. default argument value).
+-    """
+-    paramlist = addnodes.desc_parameterlist()
+-    stack = [paramlist]  # type: List[Element]
+-    try:
+-        for argument in arglist.split(','):
+-            argument = argument.strip()
+-            ends_open = ends_close = 0
+-            while argument.startswith('['):
+-                stack.append(addnodes.desc_optional())
+-                stack[-2] += stack[-1]
+-                argument = argument[1:].strip()
+-            while argument.startswith(']'):
+-                stack.pop()
+-                argument = argument[1:].strip()
+-            while argument.endswith(']') and not argument.endswith('[]'):
+-                ends_close += 1
+-                argument = argument[:-1].strip()
+-            while argument.endswith('['):
+-                ends_open += 1
+-                argument = argument[:-1].strip()
+-            if argument:
+-                stack[-1] += addnodes.desc_parameter(argument, argument)
+-            while ends_open:
+-                stack.append(addnodes.desc_optional())
+-                stack[-2] += stack[-1]
+-                ends_open -= 1
+-            while ends_close:
+-                stack.pop()
+-                ends_close -= 1
+-        if len(stack) != 1:
+-            raise IndexError
+-    except IndexError:
+-        # if there are too few or too many elements on the stack, just give up
+-        # and treat the whole argument list as one argument, discarding the
+-        # already partially populated paramlist node
+-        paramlist = addnodes.desc_parameterlist()
+-        paramlist += addnodes.desc_parameter(arglist, arglist)
+-        signode += paramlist
+-    else:
+-        signode += paramlist
+-
+-
+-# This override allows our inline type specifiers to behave like :class: link
+-# when it comes to handling "." and "~" prefixes.
+-class PyXrefMixin:
+-    def make_xref(self, rolename: str, domain: str, target: str,
+-                  innernode: "Type[TextlikeNode]" = nodes.emphasis,
+-                  contnode: Node = None, env: BuildEnvironment = None) -> Node:
+-        result = super().make_xref(rolename, domain, target,  # type: ignore
+-                                   innernode, contnode, env)
+-        result['refspecific'] = True
+-        if target.startswith(('.', '~')):
+-            prefix, result['reftarget'] = target[0], target[1:]
+-            if prefix == '.':
+-                text = target[1:]
+-            elif prefix == '~':
+-                text = target.split('.')[-1]
+-            for node in result.traverse(nodes.Text):
+-                node.parent[node.parent.index(node)] = nodes.Text(text)
+-                break
+-        return result
+-
+-    def make_xrefs(self, rolename: str, domain: str, target: str,
+-                   innernode: "Type[TextlikeNode]" = nodes.emphasis,
+-                   contnode: Node = None, env: BuildEnvironment = None) -> List[Node]:
+-        delims = r'(\s*[\[\]\(\),](?:\s*or\s)?\s*|\s+or\s+)'
+-        delims_re = re.compile(delims)
+-        sub_targets = re.split(delims, target)
+-
+-        split_contnode = bool(contnode and contnode.astext() == target)
+-
+-        results = []
+-        for sub_target in filter(None, sub_targets):
+-            if split_contnode:
+-                contnode = nodes.Text(sub_target)
+-
+-            if delims_re.match(sub_target):
+-                results.append(contnode or innernode(sub_target, sub_target))
+-            else:
+-                results.append(self.make_xref(rolename, domain, sub_target,
+-                                              innernode, contnode, env))
+-
+-        return results
+-
+-
+-class PyField(PyXrefMixin, Field):
+-    def make_xref(self, rolename: str, domain: str, target: str,
+-                  innernode: "Type[TextlikeNode]" = nodes.emphasis,
+-                  contnode: Node = None, env: BuildEnvironment = None) -> Node:
+-        if rolename == 'class' and target == 'None':
+-            # None is not a type, so use obj role instead.
+-            rolename = 'obj'
+-
+-        return super().make_xref(rolename, domain, target, innernode, contnode, env)
+-
+-
+-class PyGroupedField(PyXrefMixin, GroupedField):
+-    pass
+-
+-
+-class PyTypedField(PyXrefMixin, TypedField):
+-    def make_xref(self, rolename: str, domain: str, target: str,
+-                  innernode: "Type[TextlikeNode]" = nodes.emphasis,
+-                  contnode: Node = None, env: BuildEnvironment = None) -> Node:
+-        if rolename == 'class' and target == 'None':
+-            # None is not a type, so use obj role instead.
+-            rolename = 'obj'
+-
+-        return super().make_xref(rolename, domain, target, innernode, contnode, env)
+-
+-
+ class PyObject(ObjectDescription):
+     """
+-    Description of a general Python object.
+-
+-    :cvar allow_nesting: Class is an object that allows for nested namespaces
+-    :vartype allow_nesting: bool
++    Description of a Python language object.
+     """
+-    option_spec = {
+-        'noindex': directives.flag,
+-        'module': directives.unchanged,
+-        'annotation': directives.unchanged,
+-    }
+ 
+     doc_field_types = [
+-        PyTypedField('parameter', label=_('Parameters'),
+-                     names=('param', 'parameter', 'arg', 'argument',
+-                            'keyword', 'kwarg', 'kwparam'),
+-                     typerolename='class', typenames=('paramtype', 'type'),
+-                     can_collapse=True),
+-        PyTypedField('variable', label=_('Variables'), rolename='obj',
+-                     names=('var', 'ivar', 'cvar'),
+-                     typerolename='class', typenames=('vartype',),
+-                     can_collapse=True),
+-        PyGroupedField('exceptions', label=_('Raises'), rolename='exc',
+-                       names=('raises', 'raise', 'exception', 'except'),
+-                       can_collapse=True),
+-        Field('returnvalue', label=_('Returns'), has_arg=False,
+-              names=('returns', 'return')),
+-        PyField('returntype', label=_('Return type'), has_arg=False,
+-                names=('rtype',), bodyrolename='class'),
++        TypedField('parameter', label=_('Parameters'),
++                   names=('param', 'parameter', 'arg', 'argument',
++                         'keyword', 'kwarg', 'kwparam'),
++                   typerolename='class', typenames=('paramtype', 'type'),
++                   can_collapse=True),
++        TypedField('returnvalue', label=_('Returns'),
++                   names=('returns', 'return'),
++                   typerolename='class', typenames=('rtype',),
++                   can_collapse=True),
++        Field('returntype', label=_('Return type'), has_arg=False,
++              names=('rtype',)),
+     ]
+ 
+-    allow_nesting = False
+-
+-    def get_signature_prefix(self, sig: str) -> str:
+-        """May return a prefix to put before the object name in the
+-        signature.
+-        """
+-        return ''
+-
+-    def needs_arglist(self) -> bool:
+-        """May return true if an empty argument list is to be generated even if
+-        the document contains none.
+-        """
+-        return False
+-
+-    def handle_signature(self, sig: str, signode: desc_signature) -> Tuple[str, str]:
+-        """Transform a Python signature into RST nodes.
+-
+-        Return (fully qualified name of the thing, classname if any).
+-
+-        If inside a class, the current class name is handled intelligently:
+-        * it is stripped from the displayed name if present
+-        * it is added to the full name (return value) if not present
+-        """
+-        m = py_sig_re.match(sig)
+-        if m is None:
+-            raise ValueError
+-        prefix, name, arglist, retann = m.groups()
+-
+-        # determine module and class name (if applicable), as well as full name
+-        modname = self.options.get('module', self.env.ref_context.get('py:module'))
+-        classname = self.env.ref_context.get('py:class')
+-        if classname:
+-            add_module = False
+-            if prefix and (prefix == classname or
+-                           prefix.startswith(classname + ".")):
+-                fullname = prefix + name
+-                # class name is given again in the signature
+-                prefix = prefix[len(classname):].lstrip('.')
+-            elif prefix:
+-                # class name is given in the signature, but different
+-                # (shouldn't happen)
+-                fullname = classname + '.' + prefix + name
+-            else:
+-                # class name is not given in the signature
+-                fullname = classname + '.' + name
+-        else:
+-            add_module = True
+-            if prefix:
+-                classname = prefix.rstrip('.')
+-                fullname = prefix + name
+-            else:
+-                classname = ''
+-                fullname = name
+-
+-        signode['module'] = modname
+-        signode['class'] = classname
+-        signode['fullname'] = fullname
+-
+-        sig_prefix = self.get_signature_prefix(sig)
+-        if sig_prefix:
+-            signode += addnodes.desc_annotation(sig_prefix, sig_prefix)
+-
+-        if prefix:
+-            signode += addnodes.desc_addname(prefix, prefix)
+-        elif add_module and self.env.config.add_module_names:
+-            if modname and modname != 'exceptions':
+-                # exceptions are a special case, since they are documented in the
+-                # 'exceptions' module.
+-                nodetext = modname + '.'
+-                signode += addnodes.desc_addname(nodetext, nodetext)
+-
+-        signode += addnodes.desc_name(name, name)
+-        if arglist:
+-            try:
+-                signode += _parse_arglist(arglist)
+-            except SyntaxError:
+-                # fallback to parse arglist original parser.
+-                # it supports to represent optional arguments (ex. "func(foo [, bar])")
+-                _pseudo_parse_arglist(signode, arglist)
+-            except NotImplementedError as exc:
+-                logger.warning("could not parse arglist (%r): %s", arglist, exc,
+-                               location=signode)
+-                _pseudo_parse_arglist(signode, arglist)
+-        else:
+-            if self.needs_arglist():
+-                # for callables, add an empty parameter list
+-                signode += addnodes.desc_parameterlist()
+-
+-        if retann:
+-            children = _parse_annotation(retann)
+-            signode += addnodes.desc_returns(retann, '', *children)
+-
+-        anno = self.options.get('annotation')
+-        if anno:
+-            signode += addnodes.desc_annotation(' ' + anno, ' ' + anno)
+-
+-        return fullname, prefix
+-
+-    def get_index_text(self, modname: str, name: Tuple[str, str]) -> str:
+-        """Return the text for the index entry of the object."""
+-        raise NotImplementedError('must be implemented in subclasses')
+-
+-    def add_target_and_index(self, name_cls: Tuple[str, str], sig: str,
+-                             signode: desc_signature) -> None:
+-        modname = self.options.get('module', self.env.ref_context.get('py:module'))
+-        fullname = (modname + '.' if modname else '') + name_cls[0]
+-        node_id = make_id(self.env, self.state.document, '', fullname)
+-        signode['ids'].append(node_id)
+-
+-        # Assign old styled node_id(fullname) not to break old hyperlinks (if possible)
+-        # Note: Will removed in Sphinx-5.0  (RemovedInSphinx50Warning)
+-        if node_id != fullname and fullname not in self.state.document.ids:
+-            signode['ids'].append(fullname)
+-
+-        self.state.document.note_explicit_target(signode)
+-
+-        domain = cast(PythonDomain, self.env.get_domain('py'))
+-        domain.note_object(fullname, self.objtype, node_id, location=signode)
+-
+-        indextext = self.get_index_text(modname, name_cls)
+-        if indextext:
+-            self.indexnode['entries'].append(('single', indextext, node_id, '', None))
+-
+-    def before_content(self) -> None:
+-        """Handle object nesting before content
+-
+-        :py:class:`PyObject` represents Python language constructs. For
+-        constructs that are nestable, such as a Python classes, this method will
+-        build up a stack of the nesting heirarchy so that it can be later
+-        de-nested correctly, in :py:meth:`after_content`.
+-
+-        For constructs that aren't nestable, the stack is bypassed, and instead
+-        only the most recent object is tracked. This object prefix name will be
+-        removed with :py:meth:`after_content`.
+-        """
+-        prefix = None
+-        if self.names:
+-            # fullname and name_prefix come from the `handle_signature` method.
+-            # fullname represents the full object name that is constructed using
+-            # object nesting and explicit prefixes. `name_prefix` is the
+-            # explicit prefix given in a signature
+-            (fullname, name_prefix) = self.names[-1]
+-            if self.allow_nesting:
+-                prefix = fullname
+-            elif name_prefix:
+-                prefix = name_prefix.strip('.')
+-        if prefix:
+-            self.env.ref_context['py:class'] = prefix
+-            if self.allow_nesting:
+-                classes = self.env.ref_context.setdefault('py:classes', [])
+-                classes.append(prefix)
+-        if 'module' in self.options:
+-            modules = self.env.ref_context.setdefault('py:modules', [])
+-            modules.append(self.env.ref_context.get('py:module'))
+-            self.env.ref_context['py:module'] = self.options['module']
+-
+-    def after_content(self) -> None:
+-        """Handle object de-nesting after content
+-
+-        If this class is a nestable object, removing the last nested class prefix
+-        ends further nesting in the object.
+-
+-        If this class is not a nestable object, the list of classes should not
+-        be altered as we didn't affect the nesting levels in
+-        :py:meth:`before_content`.
+-        """
+-        classes = self.env.ref_context.setdefault('py:classes', [])
+-        if self.allow_nesting:
+-            try:
+-                classes.pop()
+-            except IndexError:
+-                pass
+-        self.env.ref_context['py:class'] = (classes[-1] if len(classes) > 0
+-                                            else None)
+-        if 'module' in self.options:
+-            modules = self.env.ref_context.setdefault('py:modules', [])
+-            if modules:
+-                self.env.ref_context['py:module'] = modules.pop()
+-            else:
+-                self.env.ref_context.pop('py:module')
+-
+-
+-class PyModulelevel(PyObject):
+-    """
+-    Description of an object on module level (functions, data).
+-    """
+-
+-    def run(self) -> List[Node]:
+-        for cls in self.__class__.__mro__:
+-            if cls.__name__ != 'DirectiveAdapter':
+-                warnings.warn('PyModulelevel is deprecated. '
+-                              'Please check the implementation of %s' % cls,
+-                              RemovedInSphinx40Warning)
+-                break
+-        else:
+-            warnings.warn('PyModulelevel is deprecated', RemovedInSphinx40Warning)
+-
+-        return super().run()
+-
+-    def needs_arglist(self) -> bool:
+-        return self.objtype == 'function'
+-
+-    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+-        if self.objtype == 'function':
+-            if not modname:
+-                return _('%s() (built-in function)') % name_cls[0]
+-            return _('%s() (in module %s)') % (name_cls[0], modname)
+-        elif self.objtype == 'data':
+-            if not modname:
+-                return _('%s (built-in variable)') % name_cls[0]
+-            return _('%s (in module %s)') % (name_cls[0], modname)
+-        else:
+-            return ''
+-
+-
+ class PyFunction(PyObject):
+-    """Description of a function."""
+-
+-    option_spec = PyObject.option_spec.copy()
+-    option_spec.update({
+-        'async': directives.flag,
+-    })
+-
+-    def get_signature_prefix(self, sig: str) -> str:
+-        if 'async' in self.options:
+-            return 'async '
+-        else:
+-            return ''
+-
+-    def needs_arglist(self) -> bool:
+-        return True
+-
+-    def add_target_and_index(self, name_cls: Tuple[str, str], sig: str,
+-                             signode: desc_signature) -> None:
+-        super().add_target_and_index(name_cls, sig, signode)
+-        modname = self.options.get('module', self.env.ref_context.get('py:module'))
+-        node_id = signode['ids'][0]
+-
+-        name, cls = name_cls
+-        if modname:
+-            text = _('%s() (in module %s)') % (name, modname)
+-            self.indexnode['entries'].append(('single', text, node_id, '', None))
++    """Description of a Python function."""
++    def handle_signature(self, sig: str, signode: desc_signature) -> str:
++        sig = sig.strip()
++        if '(' not in sig:
++            name = sig
++            arglist = None
+         else:
+-            text = '%s; %s()' % (pairindextypes['builtin'], name)
+-            self.indexnode['entries'].append(('pair', text, node_id, '', None))
+-
+-    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+-        # add index in own add_target_and_index() instead.
+-        return None
+-
+-
+-class PyDecoratorFunction(PyFunction):
+-    """Description of a decorator."""
+-
+-    def run(self) -> List[Node]:
+-        # a decorator function is a function after all
+-        self.name = 'py:function'
+-        return super().run()
+-
+-    def handle_signature(self, sig: str, signode: desc_signature) -> Tuple[str, str]:
+-        ret = super().handle_signature(sig, signode)
+-        signode.insert(0, addnodes.desc_addname('@', '@'))
+-        return ret
+-
+-    def needs_arglist(self) -> bool:
+-        return False
+-
+-
+-class PyVariable(PyObject):
+-    """Description of a variable."""
+-
+-    option_spec = PyObject.option_spec.copy()
+-    option_spec.update({
+-        'type': directives.unchanged,
+-        'value': directives.unchanged,
+-    })
+-
+-    def handle_signature(self, sig: str, signode: desc_signature) -> Tuple[str, str]:
+-        fullname, prefix = super().handle_signature(sig, signode)
+-
+-        typ = self.options.get('type')
+-        if typ:
+-            signode += addnodes.desc_annotation(typ, ': ' + typ)
+-
+-        value = self.options.get('value')
+-        if value:
+-            signode += addnodes.desc_annotation(value, ' = ' + value)
+-
+-        return fullname, prefix
+-
+-    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+-        name, cls = name_cls
+-        if modname:
+-            return _('%s (in module %s)') % (name, modname)
+-        else:
+-            return _('%s (built-in variable)') % name
+-
+-
+-class PyClasslike(PyObject):
+-    """
+-    Description of a class-like object (classes, interfaces, exceptions).
+-    """
+-
+-    allow_nesting = True
+-
+-    def get_signature_prefix(self, sig: str) -> str:
+-        return self.objtype + ' '
+-
+-    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+-        if self.objtype == 'class':
+-            if not modname:
+-                return _('%s (built-in class)') % name_cls[0]
+-            return _('%s (class in %s)') % (name_cls[0], modname)
+-        elif self.objtype == 'exception':
+-            return name_cls[0]
+-        else:
+-            return ''
+-
+-
+-class PyClassmember(PyObject):
+-    """
+-    Description of a class member (methods, attributes).
+-    """
+-
+-    def run(self) -> List[Node]:
+-        for cls in self.__class__.__mro__:
+-            if cls.__name__ != 'DirectiveAdapter':
+-                warnings.warn('PyClassmember is deprecated. '
+-                              'Please check the implementation of %s' % cls,
+-                              RemovedInSphinx40Warning)
+-                break
+-        else:
+-            warnings.warn('PyClassmember is deprecated', RemovedInSphinx40Warning)
+-
+-        return super().run()
+-
+-    def needs_arglist(self) -> bool:
+-        return self.objtype.endswith('method')
+-
+-    def get_signature_prefix(self, sig: str) -> str:
+-        if self.objtype == 'staticmethod':
+-            return 'static '
+-        elif self.objtype == 'classmethod':
+-            return 'classmethod '
+-        return ''
+-
+-    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+-        name, cls = name_cls
+-        add_modules = self.env.config.add_module_names
+-        if self.objtype == 'method':
+-            try:
+-                clsname, methname = name.rsplit('.', 1)
+-            except ValueError:
+-                if modname:
+-                    return _('%s() (in module %s)') % (name, modname)
+-                else:
+-                    return '%s()' % name
+-            if modname and add_modules:
+-                return _('%s() (%s.%s method)') % (methname, modname, clsname)
+-            else:
+-                return _('%s() (%s method)') % (methname, clsname)
+-        elif self.objtype == 'staticmethod':
+-            try:
+-                clsname, methname = name.rsplit('.', 1)
+-            except ValueError:
+-                if modname:
+-                    return _('%s() (in module %s)') % (name, modname)
+-                else:
+-                    return '%s()' % name
+-            if modname and add_modules:
+-                return _('%s() (%s.%s static method)') % (methname, modname,
+-                                                          clsname)
+-            else:
+-                return _('%s() (%s static method)') % (methname, clsname)
+-        elif self.objtype == 'classmethod':
+-            try:
+-                clsname, methname = name.rsplit('.', 1)
+-            except ValueError:
+-                if modname:
+-                    return _('%s() (in module %s)') % (name, modname)
+-                else:
+-                    return '%s()' % name
+-            if modname:
+-                return _('%s() (%s.%s class method)') % (methname, modname,
+-                                                         clsname)
+-            else:
+-                return _('%s() (%s class method)') % (methname, clsname)
+-        elif self.objtype == 'attribute':
+             try:
+-                clsname, attrname = name.rsplit('.', 1)
++                name, arglist = sig.split('(', 1)
++                arglist = arglist.rstrip(')')
+             except ValueError:
+-                if modname:
+-                    return _('%s (in module %s)') % (name, modname)
+-                else:
+-                    return name
+-            if modname and add_modules:
+-                return _('%s (%s.%s attribute)') % (attrname, modname, clsname)
+-            else:
+-                return _('%s (%s attribute)') % (attrname, clsname)
+-        else:
+-            return ''
+-
+-
+-class PyMethod(PyObject):
+-    """Description of a method."""
+-
+-    option_spec = PyObject.option_spec.copy()
+-    option_spec.update({
+-        'abstractmethod': directives.flag,
+-        'async': directives.flag,
+-        'classmethod': directives.flag,
+-        'property': directives.flag,
+-        'staticmethod': directives.flag,
+-    })
+-
+-    def needs_arglist(self) -> bool:
+-        if 'property' in self.options:
+-            return False
+-        else:
+-            return True
+-
+-    def get_signature_prefix(self, sig: str) -> str:
+-        prefix = []
+-        if 'abstractmethod' in self.options:
+-            prefix.append('abstract')
+-        if 'async' in self.options:
+-            prefix.append('async')
+-        if 'classmethod' in self.options:
+-            prefix.append('classmethod')
+-        if 'property' in self.options:
+-            prefix.append('property')
+-        if 'staticmethod' in self.options:
+-            prefix.append('static')
+-
+-        if prefix:
+-            return ' '.join(prefix) + ' '
+-        else:
+-            return ''
+-
+-    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+-        name, cls = name_cls
+-        try:
+-            clsname, methname = name.rsplit('.', 1)
+-            if modname and self.env.config.add_module_names:
+-                clsname = '.'.join([modname, clsname])
+-        except ValueError:
+-            if modname:
+-                return _('%s() (in module %s)') % (name, modname)
+-            else:
+-                return '%s()' % name
+-
+-        if 'classmethod' in self.options:
+-            return _('%s() (%s class method)') % (methname, clsname)
+-        elif 'property' in self.options:
+-            return _('%s() (%s property)') % (methname, clsname)
+-        elif 'staticmethod' in self.options:
+-            return _('%s() (%s static method)') % (methname, clsname)
+-        else:
+-            return _('%s() (%s method)') % (methname, clsname)
+-
+-
+-class PyClassMethod(PyMethod):
+-    """Description of a classmethod."""
+-
+-    option_spec = PyObject.option_spec.copy()
+-
+-    def run(self) -> List[Node]:
+-        self.name = 'py:method'
+-        self.options['classmethod'] = True
+-
+-        return super().run()
+-
+-
+-class PyStaticMethod(PyMethod):
+-    """Description of a staticmethod."""
+-
+-    option_spec = PyObject.option_spec.copy()
+-
+-    def run(self) -> List[Node]:
+-        self.name = 'py:method'
+-        self.options['staticmethod'] = True
+-
+-        return super().run()
+-
+-
+-class PyDecoratorMethod(PyMethod):
+-    """Description of a decoratormethod."""
+-
+-    def run(self) -> List[Node]:
+-        self.name = 'py:method'
+-        return super().run()
+-
+-    def handle_signature(self, sig: str, signode: desc_signature) -> Tuple[str, str]:
+-        ret = super().handle_signature(sig, signode)
+-        signode.insert(0, addnodes.desc_addname('@', '@'))
+-        return ret
+-
+-    def needs_arglist(self) -> bool:
+-        return False
+-
+-
+-class PyAttribute(PyObject):
+-    """Description of an attribute."""
+-
+-    option_spec = PyObject.option_spec.copy()
+-    option_spec.update({
+-        'type': directives.unchanged,
+-        'value': directives.unchanged,
+-    })
+-
+-    def handle_signature(self, sig: str, signode: desc_signature) -> Tuple[str, str]:
+-        fullname, prefix = super().handle_signature(sig, signode)
+-
+-        typ = self.options.get('type')
+-        if typ:
+-            signode += addnodes.desc_annotation(typ, ': ' + typ)
+-
+-        value = self.options.get('value')
+-        if value:
+-            signode += addnodes.desc_annotation(value, ' = ' + value)
+-
+-        return fullname, prefix
+-
+-    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+-        name, cls = name_cls
+-        try:
+-            clsname, attrname = name.rsplit('.', 1)
+-            if modname and self.env.config.add_module_names:
+-                clsname = '.'.join([modname, clsname])
+-        except ValueError:
+-            if modname:
+-                return _('%s (in module %s)') % (name, modname)
+-            else:
+-                return name
+-
+-        return _('%s (%s attribute)') % (attrname, clsname)
+-
+-
+-class PyDecoratorMixin:
+-    """
+-    Mixin for decorator directives.
+-    """
+-    def handle_signature(self, sig: str, signode: desc_signature) -> Tuple[str, str]:
+-        for cls in self.__class__.__mro__:
+-            if cls.__name__ != 'DirectiveAdapter':
+-                warnings.warn('PyDecoratorMixin is deprecated. '
+-                              'Please check the implementation of %s' % cls,
+-                              RemovedInSphinx50Warning)
+-                break
+-        else:
+-            warnings.warn('PyDecoratorMixin is deprecated', RemovedInSphinx50Warning)
+-
+-        ret = super().handle_signature(sig, signode)  # type: ignore
+-        signode.insert(0, addnodes.desc_addname('@', '@'))
+-        return ret
+-
+-    def needs_arglist(self) -> bool:
+-        return False
+-
+-
+-class PyModule(SphinxDirective):
+-    """
+-    Directive to mark description of a new module.
+-    """
+-
+-    has_content = False
+-    required_arguments = 1
+-    optional_arguments = 0
+-    final_argument_whitespace = False
++                return sig
++        name = name.strip()
++        signode += addnodes.desc_name(name, name)
++        if arglist:
++            params = addnodes.desc_parameterlist()
++            for arg in arglist.split(','):
++                param = addnodes.desc_parameter(arg.strip(), arg.strip())
++                params += param
++            signode += params
++        return name
++
++class PyModule(PyObject):
++    """Description of a Python module."""
+     option_spec = {
+         'platform': lambda x: x,
+         'synopsis': lambda x: x,
+@@ -895,446 +111,124 @@ class PyModule(SphinxDirective):
+         'deprecated': directives.flag,
+     }
+ 
+-    def run(self) -> List[Node]:
+-        domain = cast(PythonDomain, self.env.get_domain('py'))
+-
+-        modname = self.arguments[0].strip()
+-        noindex = 'noindex' in self.options
+-        self.env.ref_context['py:module'] = modname
+-        ret = []  # type: List[Node]
+-        if not noindex:
+-            # note module to the domain
+-            node_id = make_id(self.env, self.state.document, 'module', modname)
+-            target = nodes.target('', '', ids=[node_id], ismod=True)
+-            self.set_source_info(target)
+-
+-            # Assign old styled node_id not to break old hyperlinks (if possible)
+-            # Note: Will removed in Sphinx-5.0  (RemovedInSphinx50Warning)
+-            old_node_id = self.make_old_id(modname)
+-            if node_id != old_node_id and old_node_id not in self.state.document.ids:
+-                target['ids'].append(old_node_id)
+-
+-            self.state.document.note_explicit_target(target)
+-
+-            domain.note_module(modname,
+-                               node_id,
+-                               self.options.get('synopsis', ''),
+-                               self.options.get('platform', ''),
+-                               'deprecated' in self.options)
+-            domain.note_object(modname, 'module', node_id, location=target)
+-
+-            # the platform and synopsis aren't printed; in fact, they are only
+-            # used in the modindex currently
+-            ret.append(target)
+-            indextext = '%s; %s' % (pairindextypes['module'], modname)
+-            inode = addnodes.index(entries=[('pair', indextext, node_id, '', None)])
+-            ret.append(inode)
+-        return ret
+-
+-    def make_old_id(self, name: str) -> str:
+-        """Generate old styled node_id.
+-
+-        Old styled node_id is incompatible with docutils' node_id.
+-        It can contain dots and hyphens.
+-
+-        .. note:: Old styled node_id was mainly used until Sphinx-3.0.
+-        """
+-        return 'module-%s' % name
+-
+-
+ class PyCurrentModule(SphinxDirective):
+-    """
+-    This directive is just to tell Sphinx that we're documenting
+-    stuff in module foo, but links to module foo won't lead here.
+-    """
+-
++    """Represents the current module."""
+     has_content = False
+-    required_arguments = 1
+-    optional_arguments = 0
++    required_arguments = 0
++    optional_arguments = 1
+     final_argument_whitespace = False
+     option_spec = {}  # type: Dict
+ 
+-    def run(self) -> List[Node]:
+-        modname = self.arguments[0].strip()
+-        if modname == 'None':
+-            self.env.ref_context.pop('py:module', None)
+-        else:
+-            self.env.ref_context['py:module'] = modname
+-        return []
+-
+-
+ class PyXRefRole(XRefRole):
+     def process_link(self, env: BuildEnvironment, refnode: Element,
+                      has_explicit_title: bool, title: str, target: str) -> Tuple[str, str]:
+         refnode['py:module'] = env.ref_context.get('py:module')
+         refnode['py:class'] = env.ref_context.get('py:class')
+         if not has_explicit_title:
+-            title = title.lstrip('.')    # only has a meaning for the target
+-            target = target.lstrip('~')  # only has a meaning for the title
+-            # if the first character is a tilde, don't display the module/class
+-            # parts of the contents
+-            if title[0:1] == '~':
+-                title = title[1:]
+-                dot = title.rfind('.')
+-                if dot != -1:
+-                    title = title[dot + 1:]
+-        # if the first character is a dot, search more specific namespaces first
+-        # else search builtins first
+-        if target[0:1] == '.':
+-            target = target[1:]
+-            refnode['refspecific'] = True
++            title = title.lstrip('.')
++            target = target.lstrip('~')
+         return title, target
+ 
+-
+-def filter_meta_fields(app: Sphinx, domain: str, objtype: str, content: Element) -> None:
+-    """Filter ``:meta:`` field from its docstring."""
+-    if domain != 'py':
+-        return
+-
+-    for node in content:
+-        if isinstance(node, nodes.field_list):
+-            fields = cast(List[nodes.field], node)
+-            for field in fields:
+-                field_name = cast(nodes.field_body, field[0]).astext().strip()
+-                if field_name == 'meta' or field_name.startswith('meta '):
+-                    node.remove(field)
+-                    break
+-
+-
+-class PythonModuleIndex(Index):
+-    """
+-    Index subclass to provide the Python module index.
+-    """
+-
+-    name = 'modindex'
+-    localname = _('Python Module Index')
+-    shortname = _('modules')
+-
+-    def generate(self, docnames: Iterable[str] = None
+-                 ) -> Tuple[List[Tuple[str, List[IndexEntry]]], bool]:
+-        content = {}  # type: Dict[str, List[IndexEntry]]
+-        # list of prefixes to ignore
+-        ignores = None  # type: List[str]
+-        ignores = self.domain.env.config['modindex_common_prefix']  # type: ignore
+-        ignores = sorted(ignores, key=len, reverse=True)
+-        # list of all modules, sorted by module name
+-        modules = sorted(self.domain.data['modules'].items(),
+-                         key=lambda x: x[0].lower())
+-        # sort out collapsable modules
+-        prev_modname = ''
+-        num_toplevels = 0
+-        for modname, (docname, node_id, synopsis, platforms, deprecated) in modules:
+-            if docnames and docname not in docnames:
+-                continue
+-
+-            for ignore in ignores:
+-                if modname.startswith(ignore):
+-                    modname = modname[len(ignore):]
+-                    stripped = ignore
+-                    break
+-            else:
+-                stripped = ''
+-
+-            # we stripped the whole module name?
+-            if not modname:
+-                modname, stripped = stripped, ''
+-
+-            entries = content.setdefault(modname[0].lower(), [])
+-
+-            package = modname.split('.')[0]
+-            if package != modname:
+-                # it's a submodule
+-                if prev_modname == package:
+-                    # first submodule - make parent a group head
+-                    if entries:
+-                        last = entries[-1]
+-                        entries[-1] = IndexEntry(last[0], 1, last[2], last[3],
+-                                                 last[4], last[5], last[6])
+-                elif not prev_modname.startswith(package):
+-                    # submodule without parent in list, add dummy entry
+-                    entries.append(IndexEntry(stripped + package, 1, '', '', '', '', ''))
+-                subtype = 2
+-            else:
+-                num_toplevels += 1
+-                subtype = 0
+-
+-            qualifier = _('Deprecated') if deprecated else ''
+-            entries.append(IndexEntry(stripped + modname, subtype, docname,
+-                                      node_id, platforms, qualifier, synopsis))
+-            prev_modname = modname
+-
+-        # apply heuristics when to collapse modindex at page load:
+-        # only collapse if number of toplevel modules is larger than
+-        # number of submodules
+-        collapse = len(modules) - num_toplevels < num_toplevels
+-
+-        # sort by first letter
+-        sorted_content = sorted(content.items())
+-
+-        return sorted_content, collapse
+-
+-
+ class PythonDomain(Domain):
+     """Python language domain."""
+     name = 'py'
+     label = 'Python'
++
+     object_types = {
+         'function':     ObjType(_('function'),      'func', 'obj'),
+-        'data':         ObjType(_('data'),          'data', 'obj'),
+-        'class':        ObjType(_('class'),         'class', 'exc', 'obj'),
++        'module':       ObjType(_('module'),        'mod', 'obj'),
++        'class':        ObjType(_('class'),         'class', 'obj'),
+         'exception':    ObjType(_('exception'),     'exc', 'class', 'obj'),
+         'method':       ObjType(_('method'),        'meth', 'obj'),
+-        'classmethod':  ObjType(_('class method'),  'meth', 'obj'),
+-        'staticmethod': ObjType(_('static method'), 'meth', 'obj'),
+         'attribute':    ObjType(_('attribute'),     'attr', 'obj'),
+-        'module':       ObjType(_('module'),        'mod', 'obj'),
+-    }  # type: Dict[str, ObjType]
++        'data':        ObjType(_('data'),          'data', 'obj'),
++        'property':     ObjType(_('property'),      'property', 'obj'),
++    }
+ 
+     directives = {
+         'function':        PyFunction,
+-        'data':            PyVariable,
+-        'class':           PyClasslike,
+-        'exception':       PyClasslike,
+-        'method':          PyMethod,
+-        'classmethod':     PyClassMethod,
+-        'staticmethod':    PyStaticMethod,
+-        'attribute':       PyAttribute,
+-        'module':          PyModule,
+-        'currentmodule':   PyCurrentModule,
+-        'decorator':       PyDecoratorFunction,
+-        'decoratormethod': PyDecoratorMethod,
++        'class':          PyFunction,
++        'exception':      PyFunction,
++        'method':         PyFunction,
++        'staticmethod':   PyFunction,
++        'classmethod':    PyFunction,
++        'attribute':      PyFunction,
++        'module':         PyModule,
++        'data':          PyFunction,
++        'property':       PyFunction,
+     }
++
+     roles = {
+         'data':  PyXRefRole(),
+         'exc':   PyXRefRole(),
+-        'func':  PyXRefRole(fix_parens=True),
++        'func':  PyXRefRole(),
+         'class': PyXRefRole(),
+         'const': PyXRefRole(),
+         'attr':  PyXRefRole(),
+-        'meth':  PyXRefRole(fix_parens=True),
++        'meth':  PyXRefRole(),
+         'mod':   PyXRefRole(),
+         'obj':   PyXRefRole(),
+     }
++
+     initial_data = {
+         'objects': {},  # fullname -> docname, objtype
+-        'modules': {},  # modname -> docname, synopsis, platform, deprecated
+-    }  # type: Dict[str, Dict[str, Tuple[Any]]]
+-    indices = [
+-        PythonModuleIndex,
+-    ]
+-
+-    @property
+-    def objects(self) -> Dict[str, Tuple[str, str, str]]:
+-        return self.data.setdefault('objects', {})  # fullname -> docname, node_id, objtype
+-
+-    def note_object(self, name: str, objtype: str, node_id: str, location: Any = None) -> None:
+-        """Note a python object for cross reference.
+-
+-        .. versionadded:: 2.1
+-        """
+-        if name in self.objects:
+-            docname = self.objects[name][0]
+-            logger.warning(__('duplicate object description of %s, '
+-                              'other instance in %s, use :noindex: for one of them'),
+-                           name, docname, location=location)
+-        self.objects[name] = (self.env.docname, node_id, objtype)
+-
+-    @property
+-    def modules(self) -> Dict[str, Tuple[str, str, str, str, bool]]:
+-        return self.data.setdefault('modules', {})  # modname -> docname, node_id, synopsis, platform, deprecated  # NOQA
+-
+-    def note_module(self, name: str, node_id: str, synopsis: str,
+-                    platform: str, deprecated: bool) -> None:
+-        """Note a python module for cross reference.
+-
+-        .. versionadded:: 2.1
+-        """
+-        self.modules[name] = (self.env.docname, node_id, synopsis, platform, deprecated)
++        'modules': {},  # modname -> docname
++    }
+ 
+     def clear_doc(self, docname: str) -> None:
+-        for fullname, (fn, _x, _x) in list(self.objects.items()):
++        for fullname, (fn, _) in list(self.data['objects'].items()):
+             if fn == docname:
+-                del self.objects[fullname]
+-        for modname, (fn, _x, _x, _x, _y) in list(self.modules.items()):
++                del self.data['objects'][fullname]
++        for modname, fn in list(self.data['modules'].items()):
+             if fn == docname:
+-                del self.modules[modname]
++                del self.data['modules'][modname]
+ 
+     def merge_domaindata(self, docnames: List[str], otherdata: Dict) -> None:
+-        # XXX check duplicates?
+-        for fullname, (fn, node_id, objtype) in otherdata['objects'].items():
++        # XXX check duplicates
++        for fullname, (fn, objtype) in otherdata['objects'].items():
+             if fn in docnames:
+-                self.objects[fullname] = (fn, node_id, objtype)
+-        for modname, data in otherdata['modules'].items():
+-            if data[0] in docnames:
+-                self.modules[modname] = data
+-
+-    def find_obj(self, env: BuildEnvironment, modname: str, classname: str,
+-                 name: str, type: str, searchmode: int = 0
+-                 ) -> List[Tuple[str, Tuple[str, str, str]]]:
+-        """Find a Python object for "name", perhaps using the given module
+-        and/or classname.  Returns a list of (name, object entry) tuples.
+-        """
+-        # skip parens
+-        if name[-2:] == '()':
+-            name = name[:-2]
+-
+-        if not name:
+-            return []
+-
+-        matches = []  # type: List[Tuple[str, Tuple[str, str, str]]]
+-
+-        newname = None
+-        if searchmode == 1:
+-            if type is None:
+-                objtypes = list(self.object_types)
+-            else:
+-                objtypes = self.objtypes_for_role(type)
+-            if objtypes is not None:
+-                if modname and classname:
+-                    fullname = modname + '.' + classname + '.' + name
+-                    if fullname in self.objects and self.objects[fullname][2] in objtypes:
+-                        newname = fullname
+-                if not newname:
+-                    if modname and modname + '.' + name in self.objects and \
+-                       self.objects[modname + '.' + name][2] in objtypes:
+-                        newname = modname + '.' + name
+-                    elif name in self.objects and self.objects[name][2] in objtypes:
+-                        newname = name
+-                    else:
+-                        # "fuzzy" searching mode
+-                        searchname = '.' + name
+-                        matches = [(oname, self.objects[oname]) for oname in self.objects
+-                                   if oname.endswith(searchname) and
+-                                   self.objects[oname][2] in objtypes]
+-        else:
+-            # NOTE: searching for exact match, object type is not considered
+-            if name in self.objects:
+-                newname = name
+-            elif type == 'mod':
+-                # only exact matches allowed for modules
+-                return []
+-            elif classname and classname + '.' + name in self.objects:
+-                newname = classname + '.' + name
+-            elif modname and modname + '.' + name in self.objects:
+-                newname = modname + '.' + name
+-            elif modname and classname and \
+-                    modname + '.' + classname + '.' + name in self.objects:
+-                newname = modname + '.' + classname + '.' + name
+-        if newname is not None:
+-            matches.append((newname, self.objects[newname]))
+-        return matches
++                self.data['objects'][fullname] = (fn, objtype)
++        for modname, fn in otherdata['modules'].items():
++            if fn in docnames:
++                self.data['modules'][modname] = fn
++
++    def _resolve_module_xref(self, env: BuildEnvironment, target: str, node: addnodes.pending_xref,
++                           contnode: Element) -> Element:
++        modname = node.get('reftarget', '')
++        if modname in self.data['modules']:
++            return make_refnode(self.env, node['refdoc'],
++                            self.data['modules'][modname],
++                            'module-' + modname,
++                            contnode, modname)
++        return None
+ 
+     def resolve_xref(self, env: BuildEnvironment, fromdocname: str, builder: Builder,
+-                     type: str, target: str, node: pending_xref, contnode: Element
+-                     ) -> Element:
+-        modname = node.get('py:module')
+-        clsname = node.get('py:class')
+-        searchmode = 1 if node.hasattr('refspecific') else 0
+-        matches = self.find_obj(env, modname, clsname, target,
+-                                type, searchmode)
+-
+-        if not matches and type == 'attr':
+-            # fallback to meth (for property)
+-            matches = self.find_obj(env, modname, clsname, target, 'meth', searchmode)
+-
+-        if not matches:
+-            return None
+-        elif len(matches) > 1:
+-            logger.warning(__('more than one target found for cross-reference %r: %s'),
+-                           target, ', '.join(match[0] for match in matches),
+-                           type='ref', subtype='python', location=node)
+-        name, obj = matches[0]
+-
+-        if obj[2] == 'module':
+-            return self._make_module_refnode(builder, fromdocname, name, contnode)
+-        else:
+-            return make_refnode(builder, fromdocname, obj[0], obj[1], contnode, name)
+-
+-    def resolve_any_xref(self, env: BuildEnvironment, fromdocname: str, builder: Builder,
+-                         target: str, node: pending_xref, contnode: Element
+-                         ) -> List[Tuple[str, Element]]:
+-        modname = node.get('py:module')
+-        clsname = node.get('py:class')
+-        results = []  # type: List[Tuple[str, Element]]
+-
+-        # always search in "refspecific" mode with the :any: role
+-        matches = self.find_obj(env, modname, clsname, target, None, 1)
+-        for name, obj in matches:
+-            if obj[2] == 'module':
+-                results.append(('py:mod',
+-                                self._make_module_refnode(builder, fromdocname,
+-                                                          name, contnode)))
+-            else:
+-                results.append(('py:' + self.role_for_objtype(obj[2]),
+-                                make_refnode(builder, fromdocname, obj[0], obj[1],
+-                                             contnode, name)))
+-        return results
+-
+-    def _make_module_refnode(self, builder: Builder, fromdocname: str, name: str,
+-                             contnode: Node) -> Element:
+-        # get additional info for modules
+-        docname, node_id, synopsis, platform, deprecated = self.modules[name]
+-        title = name
+-        if synopsis:
+-            title += ': ' + synopsis
+-        if deprecated:
+-            title += _(' (deprecated)')
+-        if platform:
+-            title += ' (' + platform + ')'
+-        return make_refnode(builder, fromdocname, docname, node_id, contnode, title)
+-
+-    def get_objects(self) -> Iterator[Tuple[str, str, str, str, str, int]]:
+-        for modname, info in self.modules.items():
+-            yield (modname, modname, 'module', info[0], info[1], 0)
+-        for refname, (docname, node_id, type) in self.objects.items():
+-            if type != 'module':  # modules are already handled
+-                yield (refname, refname, type, docname, node_id, 1)
+-
+-    def get_full_qualified_name(self, node: Element) -> str:
++                    typ: str, target: str, node: pending_xref, contnode: Element) -> Element:
+         modname = node.get('py:module')
+         clsname = node.get('py:class')
+-        target = node.get('reftarget')
+-        if target is None:
+-            return None
+-        else:
+-            return '.'.join(filter(None, [modname, clsname, target]))
+-
+ 
+-def builtin_resolver(app: Sphinx, env: BuildEnvironment,
+-                     node: pending_xref, contnode: Element) -> Element:
+-    """Do not emit nitpicky warnings for built-in types."""
+-    def istyping(s: str) -> bool:
+-        if s.startswith('typing.'):
+-            s = s.split('.', 1)[1]
++        if typ == 'obj' and target == 'None':
++            # Special case None, which is referenced in type annotations
++            return make_refnode(builder, fromdocname, 'library/constants',
++                            'None', contnode, 'None')
++        elif typ == 'mod':
++            return self._resolve_module_xref(env, target, node, contnode)
+ 
+-        return s in typing.__all__  # type: ignore
+-
+-    if node.get('refdomain') != 'py':
++        # No special case recognized, resolve like other xrefs
+         return None
+-    elif node.get('reftype') in ('class', 'obj') and node.get('reftarget') == 'None':
+-        return contnode
+-    elif node.get('reftype') in ('class', 'exc'):
+-        reftarget = node.get('reftarget')
+-        if inspect.isclass(getattr(builtins, reftarget, None)):
+-            # built-in class
+-            return contnode
+-        elif istyping(reftarget):
+-            # typing class
+-            return contnode
+-
+-    return None
+ 
++    def get_objects(self) -> Iterator[Tuple[str, str, str, str, str, int]]:
++        for modname, docname in self.data['modules'].items():
++            yield (modname, modname, 'module', docname, 'module-' + modname, 0)
++        for refname, (docname, type) in self.data['objects'].items():
++            yield (refname, refname, type, docname, refname, 1)
+ 
+ def setup(app: Sphinx) -> Dict[str, Any]:
+-    app.setup_extension('sphinx.directives')
+-
++    """Setup the Python domain."""
+     app.add_domain(PythonDomain)
+-    app.connect('object-description-transform', filter_meta_fields)
+-    app.connect('missing-reference', builtin_resolver, priority=900)
+-
+     return {
+         'version': 'builtin',
+-        'env_version': 2,
++        'env_version': 1,
+         'parallel_read_safe': True,
+         'parallel_write_safe': True,
+-    }
++    }
+\ No newline at end of file
+diff --git a/sphinx/ext/autodoc/typehints.py b/sphinx/ext/autodoc/typehints.py
+index f917dbdf3..2ff32e6a4 100644
+--- a/sphinx/ext/autodoc/typehints.py
++++ b/sphinx/ext/autodoc/typehints.py
+@@ -101,6 +101,11 @@ def modify_field_list(node: nodes.field_list, annotations: Dict[str, str]) -> No
+ 
+     for name, annotation in annotations.items():
+         if name == 'return':
++            if 'return' not in arguments:
++                field = nodes.field()
++                field += nodes.field_name('', 'rtype')
++                field += nodes.field_body('', nodes.paragraph('', annotation))
++                node += field
+             continue
+ 
+         arg = arguments.get(name, {})
+@@ -123,12 +128,6 @@ def modify_field_list(node: nodes.field_list, annotations: Dict[str, str]) -> No
+ 
+         node += field
+ 
+-    if 'return' in annotations and 'return' not in arguments:
+-        field = nodes.field()
+-        field += nodes.field_name('', 'rtype')
+-        field += nodes.field_body('', nodes.paragraph('', annotation))
+-        node += field
+-
+ 
+ def setup(app: Sphinx) -> Dict[str, Any]:
+     app.connect('autodoc-process-signature', record_typehints)
+@@ -138,4 +137,4 @@ def setup(app: Sphinx) -> Dict[str, Any]:
+         'version': 'builtin',
+         'parallel_read_safe': True,
+         'parallel_write_safe': True,
+-    }
++    }
+\ No newline at end of file
 diff --git a/tox.ini b/tox.ini
 index d9f040544..bf39854b6 100644
 --- a/tox.ini
@@ -308,49 +1753,60 @@ export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
 + hash -r
 + python -m pip install -e '.[test]'
 Obtaining file:///testbed
-  Preparing metadata (setup.py): started
-  Preparing metadata (setup.py): finished with status 'done'
-Requirement already satisfied: sphinxcontrib-applehelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (1.0.4)
-Requirement already satisfied: sphinxcontrib-devhelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (1.0.2)
-Requirement already satisfied: sphinxcontrib-jsmath in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (1.0.1)
-Requirement already satisfied: sphinxcontrib-htmlhelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (2.0.1)
-Requirement already satisfied: sphinxcontrib-serializinghtml in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (1.1.5)
-Requirement already satisfied: sphinxcontrib-qthelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (1.0.3)
-Requirement already satisfied: Jinja2>=2.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (2.11.3)
-Requirement already satisfied: Pygments>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (2.19.1)
-Requirement already satisfied: docutils>=0.12 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (0.21.2)
-Requirement already satisfied: snowballstemmer>=1.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (2.2.0)
-Requirement already satisfied: babel>=1.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (2.17.0)
-Requirement already satisfied: alabaster<0.8,>=0.7 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (0.7.11)
-Requirement already satisfied: imagesize in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (1.4.1)
-Requirement already satisfied: requests>=2.5.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (2.32.3)
-Requirement already satisfied: setuptools in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (75.8.0)
-Requirement already satisfied: packaging in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (24.2)
-Requirement already satisfied: pytest in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (8.3.5)
-Requirement already satisfied: pytest-cov in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (6.0.0)
-Requirement already satisfied: html5lib in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (1.1)
-Requirement already satisfied: typed_ast in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (1.5.5)
-Requirement already satisfied: cython in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20250315) (3.0.12)
-Requirement already satisfied: MarkupSafe>=0.23 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Jinja2>=2.3->Sphinx==3.0.1.dev20250315) (2.0.1)
-Requirement already satisfied: charset-normalizer<4,>=2 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==3.0.1.dev20250315) (3.4.1)
-Requirement already satisfied: idna<4,>=2.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==3.0.1.dev20250315) (3.10)
-Requirement already satisfied: urllib3<3,>=1.21.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==3.0.1.dev20250315) (2.3.0)
-Requirement already satisfied: certifi>=2017.4.17 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==3.0.1.dev20250315) (2025.1.31)
-Requirement already satisfied: six>=1.9 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==3.0.1.dev20250315) (1.17.0)
-Requirement already satisfied: webencodings in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==3.0.1.dev20250315) (0.5.1)
-Requirement already satisfied: exceptiongroup>=1.0.0rc8 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest->Sphinx==3.0.1.dev20250315) (1.2.2)
-Requirement already satisfied: iniconfig in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest->Sphinx==3.0.1.dev20250315) (2.0.0)
-Requirement already satisfied: pluggy<2,>=1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest->Sphinx==3.0.1.dev20250315) (1.5.0)
-Requirement already satisfied: tomli>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest->Sphinx==3.0.1.dev20250315) (2.2.1)
-Requirement already satisfied: coverage>=7.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from coverage[toml]>=7.5->pytest-cov->Sphinx==3.0.1.dev20250315) (7.6.12)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Getting requirements to build editable: started
+  Getting requirements to build editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: sphinxcontrib-applehelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (1.0.4)
+Requirement already satisfied: sphinxcontrib-devhelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (1.0.2)
+Requirement already satisfied: sphinxcontrib-jsmath in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (1.0.1)
+Requirement already satisfied: sphinxcontrib-htmlhelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (2.0.1)
+Requirement already satisfied: sphinxcontrib-serializinghtml in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (1.1.5)
+Requirement already satisfied: sphinxcontrib-qthelp in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (1.0.3)
+Requirement already satisfied: Jinja2>=2.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (2.11.3)
+Requirement already satisfied: Pygments>=2.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (2.19.2)
+Requirement already satisfied: docutils>=0.12 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (0.22.4)
+Requirement already satisfied: snowballstemmer>=1.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (3.0.1)
+Requirement already satisfied: babel>=1.3 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (2.18.0)
+Requirement already satisfied: alabaster<0.8,>=0.7 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (0.7.11)
+Requirement already satisfied: imagesize in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (1.4.1)
+Requirement already satisfied: requests>=2.5.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (2.32.5)
+Requirement already satisfied: setuptools in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (80.9.0)
+Requirement already satisfied: packaging in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (25.0)
+Requirement already satisfied: pytest in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (8.4.2)
+Requirement already satisfied: pytest-cov in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (7.0.0)
+Requirement already satisfied: html5lib in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (1.1)
+Requirement already satisfied: typed_ast in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (1.5.5)
+Requirement already satisfied: cython in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Sphinx==3.0.1.dev20260222) (3.2.4)
+Requirement already satisfied: MarkupSafe>=0.23 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from Jinja2>=2.3->Sphinx==3.0.1.dev20260222) (2.0.1)
+Requirement already satisfied: charset_normalizer<4,>=2 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==3.0.1.dev20260222) (3.4.4)
+Requirement already satisfied: idna<4,>=2.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==3.0.1.dev20260222) (3.11)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==3.0.1.dev20260222) (2.6.3)
+Requirement already satisfied: certifi>=2017.4.17 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from requests>=2.5.0->Sphinx==3.0.1.dev20260222) (2026.1.4)
+Requirement already satisfied: six>=1.9 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==3.0.1.dev20260222) (1.17.0)
+Requirement already satisfied: webencodings in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from html5lib->Sphinx==3.0.1.dev20260222) (0.5.1)
+Requirement already satisfied: exceptiongroup>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest->Sphinx==3.0.1.dev20260222) (1.3.1)
+Requirement already satisfied: iniconfig>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest->Sphinx==3.0.1.dev20260222) (2.1.0)
+Requirement already satisfied: pluggy<2,>=1.5 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest->Sphinx==3.0.1.dev20260222) (1.6.0)
+Requirement already satisfied: tomli>=1 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from pytest->Sphinx==3.0.1.dev20260222) (2.3.0)
+Requirement already satisfied: typing-extensions>=4.6.0 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from exceptiongroup>=1->pytest->Sphinx==3.0.1.dev20260222) (4.15.0)
+Requirement already satisfied: coverage>=7.10.6 in /opt/miniconda3/envs/testbed/lib/python3.9/site-packages (from coverage[toml]>=7.10.6->pytest-cov->Sphinx==3.0.1.dev20260222) (7.10.7)
+Building wheels for collected packages: Sphinx
+  Building editable for Sphinx (pyproject.toml): started
+  Building editable for Sphinx (pyproject.toml): finished with status 'done'
+  Created wheel for Sphinx: filename=sphinx-3.0.1.dev20260222-0.editable-py3-none-any.whl size=8283 sha256=7dae3e86232f7af3318a5a3ae3461d47382b2fe43a0d593142a3b4f4189e6f9a
+  Stored in directory: /tmp/pip-ephem-wheel-cache-vup76q34/wheels/7d/66/67/70d1ee2124ccf21d601c352e25cdca10f611f7c8b3f9ffb9e4
+Successfully built Sphinx
 Installing collected packages: Sphinx
   Attempting uninstall: Sphinx
-    Found existing installation: Sphinx 3.0.1.dev20250313
-    Uninstalling Sphinx-3.0.1.dev20250313:
-      Successfully uninstalled Sphinx-3.0.1.dev20250313
-  DEPRECATION: Legacy editable install of Sphinx[test]==3.0.1.dev20250315 from file:///testbed (setup.py develop) is deprecated. pip 25.1 will enforce this behaviour change. A possible replacement is to add a pyproject.toml or enable --use-pep517, and use setuptools >= 64. If the resulting installation is not behaving as expected, try using --config-settings editable_mode=compat. Please consult the setuptools documentation for more information. Discussion can be found at https://github.com/pypa/pip/issues/11457
-  Running setup.py develop for Sphinx
-Successfully installed Sphinx
+    Found existing installation: Sphinx 3.0.1.dev20260222
+    Uninstalling Sphinx-3.0.1.dev20260222:
+      Successfully uninstalled Sphinx-3.0.1.dev20260222
+Successfully installed Sphinx-3.0.1.dev20260222
 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
 + git checkout aca3f825f2e4a8817190f3c885a242a285aa0dba tests/test_domain_py.py
 Updated 0 paths from 20b75ba95
@@ -359,770 +1815,108 @@ Checking patch tests/test_domain_py.py...
 Applied patch tests/test_domain_py.py cleanly.
 + tox --current-env -epy39 -v -- tests/test_domain_py.py
 py39: commands[0]> pytest -rA --durations 25 tests/test_domain_py.py
-============================= test session starts ==============================
-platform linux -- Python 3.9.21, pytest-8.3.5, pluggy-1.5.0
-cachedir: .tox/py39/.pytest_cache
-libraries: Sphinx-3.0.1+/aca3f825f, docutils-0.21.2
-base tempdir: /tmp/pytest-of-root/pytest-0
-rootdir: /testbed
-configfile: setup.cfg
-plugins: cov-6.0.0
-collected 28 items
-
-tests/test_domain_py.py ......F.....................                     [100%]
-
-=================================== FAILURES ===================================
-____________________________ test_parse_annotation _____________________________
-
-    def test_parse_annotation():
-        doctree = _parse_annotation("int")
-        assert_node(doctree, ([pending_xref, "int"],))
-        assert_node(doctree[0], pending_xref, refdomain="py", reftype="class", reftarget="int")
-    
-        doctree = _parse_annotation("List[int]")
-        assert_node(doctree, ([pending_xref, "List"],
-                              [desc_sig_punctuation, "["],
-                              [pending_xref, "int"],
-                              [desc_sig_punctuation, "]"]))
-    
-        doctree = _parse_annotation("Tuple[int, int]")
-        assert_node(doctree, ([pending_xref, "Tuple"],
-                              [desc_sig_punctuation, "["],
-                              [pending_xref, "int"],
-                              [desc_sig_punctuation, ", "],
-                              [pending_xref, "int"],
-                              [desc_sig_punctuation, "]"]))
-    
-        doctree = _parse_annotation("Callable[[int, int], int]")
-        assert_node(doctree, ([pending_xref, "Callable"],
-                              [desc_sig_punctuation, "["],
-                              [desc_sig_punctuation, "["],
-                              [pending_xref, "int"],
-                              [desc_sig_punctuation, ", "],
-                              [pending_xref, "int"],
-                              [desc_sig_punctuation, "]"],
-                              [desc_sig_punctuation, ", "],
-                              [pending_xref, "int"],
-                              [desc_sig_punctuation, "]"]))
-    
-        # None type makes an object-reference (not a class reference)
-        doctree = _parse_annotation("None")
-        assert_node(doctree, ([pending_xref, "None"],))
->       assert_node(doctree[0], pending_xref, refdomain="py", reftype="obj", reftarget="None")
-
-tests/test_domain_py.py:273: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-node = <pending_xref: <#text: 'None'>>
-cls = <class 'sphinx.addnodes.pending_xref'>, xpath = ''
-kwargs = {'refdomain': 'py', 'reftarget': 'None', 'reftype': 'obj'}
-key = 'reftype', value = 'obj'
-
-    def assert_node(node: Node, cls: Any = None, xpath: str = "", **kwargs: Any) -> None:
-        if cls:
-            if isinstance(cls, list):
-                assert_node(node, cls[0], xpath=xpath, **kwargs)
-                if cls[1:]:
-                    if isinstance(cls[1], tuple):
-                        assert_node(node, cls[1], xpath=xpath, **kwargs)
-                    else:
-                        assert isinstance(node, nodes.Element), \
-                            'The node%s does not have any children' % xpath
-                        assert len(node) == 1, \
-                            'The node%s has %d child nodes, not one' % (xpath, len(node))
-                        assert_node(node[0], cls[1:], xpath=xpath + "[0]", **kwargs)
-            elif isinstance(cls, tuple):
-                assert isinstance(node, (list, nodes.Element)), \
-                    'The node%s does not have any items' % xpath
-                assert len(node) == len(cls), \
-                    'The node%s has %d child nodes, not %r' % (xpath, len(node), len(cls))
-                for i, nodecls in enumerate(cls):
-                    path = xpath + "[%d]" % i
-                    assert_node(node[i], nodecls, xpath=path, **kwargs)
-            elif isinstance(cls, str):
-                assert node == cls, 'The node %r is not %r: %r' % (xpath, cls, node)
-            else:
-                assert isinstance(node, cls), \
-                    'The node%s is not subclass of %r: %r' % (xpath, cls, node)
-    
-        if kwargs:
-            assert isinstance(node, nodes.Element), \
-                'The node%s does not have any attributes' % xpath
-    
-            for key, value in kwargs.items():
-                assert key in node, \
-                    'The node%s does not have %r attribute: %r' % (xpath, key, node)
->               assert node[key] == value, \
-                    'The node%s[%s] is not %r: %r' % (xpath, key, value, node[key])
-E               AssertionError: The node[reftype] is not 'obj': 'class'
-
-sphinx/testing/util.py:86: AssertionError
-=============================== warnings summary ===============================
-sphinx/util/docutils.py:45
-  /testbed/sphinx/util/docutils.py:45: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
-    __version_info__ = tuple(LooseVersion(docutils.__version__).version)
-
-sphinx/registry.py:22
-  /testbed/sphinx/registry.py:22: DeprecationWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html
-    from pkg_resources import iter_entry_points
-
-../opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pkg_resources/__init__.py:3142
-../opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pkg_resources/__init__.py:3142
-../opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pkg_resources/__init__.py:3142
-../opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pkg_resources/__init__.py:3142
-  /opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pkg_resources/__init__.py:3142: DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('sphinxcontrib')`.
-  Implementing implicit namespace packages (as specified in PEP 420) is preferred to `pkg_resources.declare_namespace`. See https://setuptools.pypa.io/en/latest/references/keywords.html#keyword-namespace-packages
-    declare_namespace(pkg)
-
-sphinx/directives/patches.py:15
-  /testbed/sphinx/directives/patches.py:15: DeprecationWarning: The `docutils.parsers.rst.directive.html` module will be removed in Docutils 2.0. Since Docutils 0.18, the "Meta" node is defined in `docutils.parsers.rst.directives.misc`.
-    from docutils.parsers.rst.directives import images, html, tables
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:210: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse():  # type: Node
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/i18n.py:88: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(addnodes.translatable):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:110: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for ref in self.document.traverse(nodes.substitution_reference):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:131: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.target):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:150: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.block_quote):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:175: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.Element):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:222: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(addnodes.index):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/references.py:30: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.substitution_definition):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:189: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.section):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:279: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.doctest_block):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/domains/citation.py:117: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.citation):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/domains/citation.py:136: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.citation_reference):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/builders/latex/transforms.py:37: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(matcher):  # type: nodes.Element
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:291: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(matcher):  # type: Element
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/util/compat.py:44: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(addnodes.index):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/domains/index.py:52: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in document.traverse(addnodes.index):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/domains/math.py:85: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    self.data['has_equations'][docname] = any(document.traverse(math_node))
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/environment/collectors/asset.py:47: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in doctree.traverse(nodes.image):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/environment/collectors/asset.py:124: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in doctree.traverse(addnodes.download_reference):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/environment/collectors/title.py:46: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in doctree.traverse(nodes.section):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:301: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.system_message):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/__init__.py:384: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(addnodes.manpage):
-
-tests/test_domain_py.py: 28 warnings
-  /testbed/sphinx/transforms/i18n.py:484: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for inline in self.document.traverse(matcher):  # type: nodes.inline
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/domains/cpp.py:6895: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(AliasNode):
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/transforms/post_transforms/__init__.py:71: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(addnodes.pending_xref):
-
-tests/test_domain_py.py: 42 warnings
-  /testbed/sphinx/util/nodes.py:596: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in document.traverse(addnodes.only):
-
-tests/test_domain_py.py: 32 warnings
-  /testbed/sphinx/transforms/post_transforms/images.py:36: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.image):
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/transforms/post_transforms/__init__.py:214: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(addnodes.desc_sig_element):
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/builders/latex/transforms.py:595: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(nodes.title):
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/builders/latex/transforms.py:597: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for i, index in enumerate(node.traverse(addnodes.index)):
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/transforms/post_transforms/code.py:44: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in self.document.traverse(addnodes.highlightlang):
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/transforms/post_transforms/code.py:99: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for lbnode in self.document.traverse(nodes.literal_block):  # type: nodes.literal_block
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/transforms/post_transforms/code.py:103: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for dbnode in self.document.traverse(nodes.doctest_block):  # type: nodes.doctest_block
-
-tests/test_domain_py.py: 16 warnings
-  /testbed/sphinx/environment/__init__.py:541: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for toctreenode in doctree.traverse(addnodes.toctree):
-
-tests/test_domain_py.py: 22 warnings
-  /testbed/sphinx/environment/adapters/toctree.py:204: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for subtocnode in toc.traverse(addnodes.toctree):
-
-tests/test_domain_py.py: 11 warnings
-  /testbed/sphinx/environment/adapters/toctree.py:262: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for refnode in newnode.traverse(nodes.reference):
-
-tests/test_domain_py.py: 12 warnings
-  /testbed/sphinx/util/nodes.py:348: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for img in node.traverse(nodes.image):
-
-tests/test_domain_py.py: 12 warnings
-  /testbed/sphinx/util/nodes.py:350: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for raw in node.traverse(nodes.raw):
-
-tests/test_domain_py.py::test_domain_py_xrefs
-  /testbed/tests/test_domain_py.py:81: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    refnodes = list(doctree.traverse(pending_xref))
-
-tests/test_domain_py.py::test_domain_py_xrefs
-  /testbed/tests/test_domain_py.py:99: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    refnodes = list(doctree.traverse(pending_xref))
-
-tests/test_domain_py.py::test_domain_py_xrefs
-  /testbed/tests/test_domain_py.py:128: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    refnodes = list(doctree.traverse(pending_xref))
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /testbed/sphinx/builders/html/__init__.py:415: DeprecationWarning: The frontend.OptionParser class will be replaced by a subclass of argparse.ArgumentParser in Docutils 0.21 or later.
-    self.docsettings = OptionParser(
-
-tests/test_domain_py.py: 72 warnings
-  /opt/miniconda3/envs/testbed/lib/python3.9/optparse.py:1000: DeprecationWarning: The frontend.Option class will be removed in Docutils 0.21 or later.
-    option = self.option_class(*args, **kwargs)
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /testbed/sphinx/builders/__init__.py:182: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in doctree.traverse(nodes.image):
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /testbed/sphinx/builders/html/__init__.py:827: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in doctree.traverse(nodes.image):
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /testbed/sphinx/environment/adapters/toctree.py:313: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for node in toc.traverse(nodes.reference):
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /opt/miniconda3/envs/testbed/lib/python3.9/site-packages/alabaster/layout.html:114: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-    _gaq.push(['_setAllowLinker', true]);
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /opt/miniconda3/envs/testbed/lib/python3.9/site-packages/alabaster/about.html:70: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /opt/miniconda3/envs/testbed/lib/python3.9/site-packages/alabaster/about.html:99: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /testbed/sphinx/environment/adapters/toctree.py:327: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for toctreenode in doctree.traverse(addnodes.toctree):
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /opt/miniconda3/envs/testbed/lib/python3.9/site-packages/alabaster/layout.html:215: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  /opt/miniconda3/envs/testbed/lib/python3.9/site-packages/alabaster/layout.html:238: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  <template>:33: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  <template>:224: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  <template>:386: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-
-tests/test_domain_py.py::test_resolve_xref_for_properties
-  <template>:401: DeprecationWarning: 'soft_unicode' has been renamed to 'soft_str'. The old name will be removed in MarkupSafe 2.1.
-
-tests/test_domain_py.py: 24 warnings
-  /testbed/sphinx/ext/todo.py:98: PendingDeprecationWarning: nodes.Node.traverse() is obsoleted by Node.findall().
-    for todo in document.traverse(todo_node):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-==================================== PASSES ====================================
-_____________________________ test_domain_py_xrefs _____________________________
------------------------------ Captured stdout call -----------------------------
-[<pending_xref: <literal...>>, <pending_xref: <literal...>>]
-<pending_xref py:class="B" py:module="test.extra" refdoc="module_option" refdomain="py" refexplicit="False" reftarget="foo" reftype="meth" refwarn="False"><literal classes="xref py py-meth">foo()</literal></pending_xref>
-<pending_xref py:class="B" py:module="test.extra" refdoc="module_option" refdomain="py" refexplicit="False" reftarget="foo" reftype="meth" refwarn="False"><literal classes="xref py py-meth">foo()</literal></pending_xref>
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: dummy
-# srcdir: /tmp/pytest-of-root/pytest-0/domain-py
-# outdir: /tmp/pytest-of-root/pytest-0/domain-py/_build/dummy
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-[01mbuilding [dummy]: [39;49;00mall source files
-[01mupdating environment: [39;49;00m[new config] 4 added, 0 changed, 0 removed
-[01mreading sources... [39;49;00m[ 25%] [35mindex[39;49;00m                                                [01mreading sources... [39;49;00m[ 50%] [35mmodule[39;49;00m                                               [01mreading sources... [39;49;00m[ 75%] [35mmodule_option[39;49;00m                                        [01mreading sources... [39;49;00m[100%] [35mroles[39;49;00m                                                
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpickling environment... [39;49;00mdone
-[01mchecking consistency... [39;49;00mdone
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 25%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 50%] [32mmodule[39;49;00m                                                [01mwriting output... [39;49;00m[ 75%] [32mmodule_option[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32mroles[39;49;00m                                                 
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/domain-py/module_option.rst: WARNING: document isn't included in any toctree[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/domain-py/module.rst:49: WARNING: more than one target found for cross-reference 'ModTopLevel': module_a.submodule.ModTopLevel, module_b.submodule.ModTopLevel[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: dummy
-# srcdir: /tmp/pytest-of-root/pytest-0/domain-py
-# outdir: /tmp/pytest-of-root/pytest-0/domain-py/_build/dummy
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-[01mbuilding [dummy]: [39;49;00mall source files
-[01mupdating environment: [39;49;00m0 added, 0 changed, 0 removed
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 25%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 50%] [32mmodule[39;49;00m                                                [01mwriting output... [39;49;00m[ 75%] [32mmodule_option[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32mroles[39;49;00m                                                 
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/domain-py/module.rst:49: WARNING: more than one target found for cross-reference 'ModTopLevel': module_a.submodule.ModTopLevel, module_b.submodule.ModTopLevel[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/domain-py
-# outdir: /tmp/pytest-of-root/pytest-0/domain-py/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-[01mbuilding [html]: [39;49;00mall source files
-[01mupdating environment: [39;49;00m0 added, 0 changed, 0 removed
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 25%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 50%] [32mmodule[39;49;00m                                                [01mwriting output... [39;49;00m[ 75%] [32mmodule_option[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32mroles[39;49;00m                                                 
-[01mgenerating indices... [39;49;00m genindex py-modindexdone
-[01mwriting additional pages... [39;49;00m searchdone
-[01mcopying static files... ... [39;49;00mdone
-[01mcopying extra files... [39;49;00mdone
-[01mdumping search index in English (code: en)... [39;49;00mdone
-[01mdumping object inventory... [39;49;00mdone
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/domain-py/module.rst:49: WARNING: more than one target found for cross-reference 'ModTopLevel': module_a.submodule.ModTopLevel, module_b.submodule.ModTopLevel[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: dummy
-# srcdir: /tmp/pytest-of-root/pytest-0/domain-py
-# outdir: /tmp/pytest-of-root/pytest-0/domain-py/_build/dummy
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-[01mloading pickled environment... [39;49;00mdone
-[01mbuilding [dummy]: [39;49;00mall source files
-[01mupdating environment: [39;49;00m0 added, 0 changed, 0 removed
-[01mlooking for now-outdated files... [39;49;00mnone found
-[01mpreparing documents... [39;49;00mdone
-[01mwriting output... [39;49;00m[ 25%] [32mindex[39;49;00m                                                 [01mwriting output... [39;49;00m[ 50%] [32mmodule[39;49;00m                                                [01mwriting output... [39;49;00m[ 75%] [32mmodule_option[39;49;00m                                         [01mwriting output... [39;49;00m[100%] [32mroles[39;49;00m                                                 
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/domain-py/module.rst:49: WARNING: more than one target found for cross-reference 'ModTopLevel': module_a.submodule.ModTopLevel, module_b.submodule.ModTopLevel[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/root/index.rst:1: WARNING: duplicate object description of hello, other instance in index, use :noindex: for one of them[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/root/index.rst:1: WARNING: duplicate object description of hello, other instance in index, use :noindex: for one of them[39;49;00m
-[91m/tmp/pytest-of-root/pytest-0/root/index.rst:1: WARNING: duplicate object description of hello, other instance in index, use :noindex: for one of them[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
---------------------------- Captured stdout teardown ---------------------------
-# testroot: root
-# builder: html
-# srcdir: /tmp/pytest-of-root/pytest-0/root
-# outdir: /tmp/pytest-of-root/pytest-0/root/_build/html
-# status: 
-[01mRunning Sphinx v3.0.1+/aca3f825f[39;49;00m
-
-# warning: 
-[91mWARNING: while setting up extension sphinx.addnodes: node class 'meta' is already registered, its visitors will be overridden[39;49;00m
-
-============================= slowest 25 durations =============================
-0.26s setup    tests/test_domain_py.py::test_domain_py_xrefs
-0.16s call     tests/test_domain_py.py::test_resolve_xref_for_properties
-0.07s call     tests/test_domain_py.py::test_domain_py_xrefs
-0.04s setup    tests/test_domain_py.py::test_pyfunction_signature
-0.03s call     tests/test_domain_py.py::test_pyfunction_signature_full
-0.01s call     tests/test_domain_py.py::test_pyfunction_signature_full_py38
-0.01s setup    tests/test_domain_py.py::test_resolve_xref_for_properties
-0.01s setup    tests/test_domain_py.py::test_pyobject_prefix
-0.01s setup    tests/test_domain_py.py::test_pystaticmethod
-0.01s setup    tests/test_domain_py.py::test_exceptions_module_is_ignored
-0.01s setup    tests/test_domain_py.py::test_pyexception_signature
-0.01s setup    tests/test_domain_py.py::test_pydata_signature
-0.01s setup    tests/test_domain_py.py::test_pyfunction_signature_full
-0.01s setup    tests/test_domain_py.py::test_optional_pyfunction_signature
-0.01s setup    tests/test_domain_py.py::test_pyattribute
-0.01s setup    tests/test_domain_py.py::test_pyfunction_signature_full_py38
-0.01s setup    tests/test_domain_py.py::test_pydata
-0.01s setup    tests/test_domain_py.py::test_pydata_signature_old
-0.01s setup    tests/test_domain_py.py::test_pyclassmethod
-0.01s setup    tests/test_domain_py.py::test_pymethod_options
-0.01s setup    tests/test_domain_py.py::test_pyfunction
-0.01s setup    tests/test_domain_py.py::test_pydecorator_signature
-0.01s setup    tests/test_domain_py.py::test_pydecoratormethod_signature
-0.01s setup    tests/test_domain_py.py::test_module_index
-0.01s setup    tests/test_domain_py.py::test_module_index_submodule
-=========================== short test summary info ============================
-PASSED tests/test_domain_py.py::test_function_signatures
-PASSED tests/test_domain_py.py::test_domain_py_xrefs
-PASSED tests/test_domain_py.py::test_domain_py_objects
-PASSED tests/test_domain_py.py::test_resolve_xref_for_properties
-PASSED tests/test_domain_py.py::test_domain_py_find_obj
-PASSED tests/test_domain_py.py::test_get_full_qualified_name
-PASSED tests/test_domain_py.py::test_pyfunction_signature
-PASSED tests/test_domain_py.py::test_pyfunction_signature_full
-PASSED tests/test_domain_py.py::test_pyfunction_signature_full_py38
-PASSED tests/test_domain_py.py::test_optional_pyfunction_signature
-PASSED tests/test_domain_py.py::test_pyexception_signature
-PASSED tests/test_domain_py.py::test_exceptions_module_is_ignored
-PASSED tests/test_domain_py.py::test_pydata_signature
-PASSED tests/test_domain_py.py::test_pydata_signature_old
-PASSED tests/test_domain_py.py::test_pyobject_prefix
-PASSED tests/test_domain_py.py::test_pydata
-PASSED tests/test_domain_py.py::test_pyfunction
-PASSED tests/test_domain_py.py::test_pymethod_options
-PASSED tests/test_domain_py.py::test_pyclassmethod
-PASSED tests/test_domain_py.py::test_pystaticmethod
-PASSED tests/test_domain_py.py::test_pyattribute
-PASSED tests/test_domain_py.py::test_pydecorator_signature
-PASSED tests/test_domain_py.py::test_pydecoratormethod_signature
-PASSED tests/test_domain_py.py::test_module_index
-PASSED tests/test_domain_py.py::test_module_index_submodule
-PASSED tests/test_domain_py.py::test_module_index_not_collapsed
-PASSED tests/test_domain_py.py::test_modindex_common_prefix
-FAILED tests/test_domain_py.py::test_parse_annotation - AssertionError: The n...
-================= 1 failed, 27 passed, 1084 warnings in 1.11s ==================
-py39: exit 1 (1.63 seconds) /testbed> pytest -rA --durations 25 tests/test_domain_py.py pid=107
-  py39: FAIL code 1 (1.64=setup[0.01]+cmd[1.63] seconds)
-  evaluation failed :( (1.74 seconds)
+Traceback (most recent call last):
+  File "/testbed/sphinx/writers/latex.py", line 40, in <module>
+    from docutils.utils.roman import toRoman
+ModuleNotFoundError: No module named 'docutils.utils.roman'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 860, in import_plugin
+    __import__(importspec)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/assertion/rewrite.py", line 186, in exec_module
+    exec(co, module.__dict__)
+  File "/testbed/sphinx/testing/fixtures.py", line 21, in <module>
+    from sphinx.testing import util
+  File "/testbed/sphinx/testing/util.py", line 23, in <module>
+    from sphinx.builders.latex import LaTeXBuilder
+  File "/testbed/sphinx/builders/latex/__init__.py", line 39, in <module>
+    from sphinx.writers.latex import LaTeXWriter, LaTeXTranslator
+  File "/testbed/sphinx/writers/latex.py", line 43, in <module>
+    from roman import toRoman  # type: ignore
+ModuleNotFoundError: No module named 'roman'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/testbed/bin/pytest", line 7, in <module>
+    sys.exit(console_main())
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 201, in console_main
+    code = main()
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 156, in main
+    config = _prepareconfig(args, plugins)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 342, in _prepareconfig
+    config = pluginmanager.hook.pytest_cmdline_parse(
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_callers.py", line 167, in _multicall
+    raise exception
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/helpconfig.py", line 112, in pytest_cmdline_parse
+    config = yield
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 1146, in pytest_cmdline_parse
+    self.parse(args)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 1527, in parse
+    self._preparse(args, addopts=addopts)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 1431, in _preparse
+    self.hook.pytest_load_initial_conftests(
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_callers.py", line 167, in _multicall
+    raise exception
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/warnings.py", line 129, in pytest_load_initial_conftests
+    return (yield)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/capture.py", line 173, in pytest_load_initial_conftests
+    yield
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 1228, in pytest_load_initial_conftests
+    self.pluginmanager._set_initial_conftests(
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 583, in _set_initial_conftests
+    self._try_load_conftest(
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 621, in _try_load_conftest
+    self._loadconftestmodules(
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 661, in _loadconftestmodules
+    mod = self._importconftest(
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 737, in _importconftest
+    self.consider_conftest(mod, registration_name=conftestpath_plugin_name)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 818, in consider_conftest
+    self.register(conftestmodule, name=registration_name)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 514, in register
+    self.consider_module(plugin)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 826, in consider_module
+    self._import_plugin_specs(getattr(mod, "pytest_plugins", []))
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 833, in _import_plugin_specs
+    self.import_plugin(import_spec)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 862, in import_plugin
+    raise ImportError(
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/config/__init__.py", line 860, in import_plugin
+    __import__(importspec)
+  File "/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/assertion/rewrite.py", line 186, in exec_module
+    exec(co, module.__dict__)
+  File "/testbed/sphinx/testing/fixtures.py", line 21, in <module>
+    from sphinx.testing import util
+  File "/testbed/sphinx/testing/util.py", line 23, in <module>
+    from sphinx.builders.latex import LaTeXBuilder
+  File "/testbed/sphinx/builders/latex/__init__.py", line 39, in <module>
+    from sphinx.writers.latex import LaTeXWriter, LaTeXTranslator
+  File "/testbed/sphinx/writers/latex.py", line 43, in <module>
+    from roman import toRoman  # type: ignore
+ImportError: Error importing plugin "sphinx.testing.fixtures": No module named 'roman'
+py39: exit 1 (0.54 seconds) /testbed> pytest -rA --durations 25 tests/test_domain_py.py pid=114
+  py39: FAIL code 1 (0.57=setup[0.03]+cmd[0.54] seconds)
+  evaluation failed :( (0.68 seconds)
 + git checkout aca3f825f2e4a8817190f3c885a242a285aa0dba tests/test_domain_py.py
 Updated 1 path from 20b75ba95

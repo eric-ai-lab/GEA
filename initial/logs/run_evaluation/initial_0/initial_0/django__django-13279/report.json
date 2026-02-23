@@ -3,11 +3,10 @@
         "patch_is_None": false,
         "patch_exists": true,
         "patch_successfully_applied": true,
-        "resolved": false,
+        "resolved": true,
         "tests_status": {
             "FAIL_TO_PASS": {
-                "success": [],
-                "failure": [
+                "success": [
                     "test_default_hashing_algorith_legacy_decode (sessions_tests.tests.CookieSessionTests)",
                     "test_default_hashing_algorith_legacy_decode (sessions_tests.tests.CacheSessionTests)",
                     "test_default_hashing_algorith_legacy_decode (sessions_tests.tests.FileSessionTests)",
@@ -17,7 +16,8 @@
                     "test_default_hashing_algorith_legacy_decode (sessions_tests.tests.DatabaseSessionTests)",
                     "test_default_hashing_algorith_legacy_decode (sessions_tests.tests.DatabaseSessionWithTimeZoneTests)",
                     "test_default_hashing_algorith_legacy_decode (sessions_tests.tests.CustomDatabaseSessionTests)"
-                ]
+                ],
+                "failure": []
             },
             "PASS_TO_PASS": {
                 "success": [

@@ -14,11 +14,13 @@
             "PASS_TO_PASS": {
                 "success": [
                     "tests/test_domain_py.py::test_function_signatures",
+                    "tests/test_domain_py.py::test_get_full_qualified_name"
+                ],
+                "failure": [
                     "tests/test_domain_py.py::test_domain_py_xrefs",
                     "tests/test_domain_py.py::test_domain_py_objects",
                     "tests/test_domain_py.py::test_resolve_xref_for_properties",
                     "tests/test_domain_py.py::test_domain_py_find_obj",
-                    "tests/test_domain_py.py::test_get_full_qualified_name",
                     "tests/test_domain_py.py::test_parse_annotation",
                     "tests/test_domain_py.py::test_pyfunction_signature",
                     "tests/test_domain_py.py::test_pyfunction_signature_full",
@@ -47,8 +49,7 @@
                     "tests/test_domain_py.py::test_modindex_common_prefix",
                     "tests/test_domain_py.py::test_noindexentry",
                     "tests/test_domain_py.py::test_warn_missing_reference"
-                ],
-                "failure": []
+                ]
             },
             "FAIL_TO_FAIL": {
                 "success": [],

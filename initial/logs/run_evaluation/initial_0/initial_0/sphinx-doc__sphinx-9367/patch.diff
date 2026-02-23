@@ -34,7 +34,7 @@ index 206ff4ad4..4bb5faeb1 100644
  
  extras_require = {
 diff --git a/sphinx/pycode/ast.py b/sphinx/pycode/ast.py
-index f541ec0a9..8c4ad98e8 100644
+index f541ec0a9..ac4aafe0c 100644
 --- a/sphinx/pycode/ast.py
 +++ b/sphinx/pycode/ast.py
 @@ -213,10 +213,12 @@ class _UnparseVisitor(ast.NodeVisitor):
@@ -46,10 +46,10 @@ index f541ec0a9..8c4ad98e8 100644
 -        else:
 +        if not node.elts:
              return "()"
-+        items = [self.visit(e) for e in node.elts]
-+        if len(items) == 1:
-+            return "(%s,)" % items[0]
-+        return "(" + ", ".join(items) + ")"
++        elts = [self.visit(e) for e in node.elts]
++        if len(elts) == 1:
++            return "(" + elts[0] + ",)"  # Add trailing comma for single-element tuples
++        return "(" + ", ".join(elts) + ")"
  
      if sys.version_info < (3, 8):
          # these ast nodes were deprecated in python 3.8

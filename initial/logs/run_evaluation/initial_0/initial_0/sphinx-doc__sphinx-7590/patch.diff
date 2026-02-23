@@ -33,3 +33,175 @@ index a427d5493..978e3d8e0 100644
  ]
  
  extras_require = {
+diff --git a/sphinx/util/cfamily.py b/sphinx/util/cfamily.py
+index 790a492a5..0240ee5e9 100644
+--- a/sphinx/util/cfamily.py
++++ b/sphinx/util/cfamily.py
+@@ -67,6 +67,19 @@ char_literal_re = re.compile(r'''(?x)
+     )'
+ ''')
+ 
++# Add support for user defined literals like 42_i, 123.0_km, etc.
++udl_literal_re = re.compile(r'''(?x)
++    (?:
++        [1-9][0-9]*       # decimal integer
++    |   0[0-7]*           # octal integer
++    |   0[xX][0-9a-fA-F]+ # hex integer
++    |   0[bB][01]+        # binary integer
++    |   [0-9]*\.[0-9]+    # decimal float
++    |   [0-9]+\.?         # decimal float
++    )
++    [a-zA-Z_][a-zA-Z0-9_]*  # user defined literal suffix
++''')
++
+ 
+ def verify_description_mode(mode: str) -> None:
+     if mode not in ('lastIsName', 'noneIsName', 'markType', 'markName', 'param'):
+@@ -199,7 +212,6 @@ class ASTParenAttribute(ASTAttribute):
+ 
+ ################################################################################
+ 
+-
+ class UnsupportedMultiCharacterCharLiteral(Exception):
+     @property
+     def decoded(self) -> str:
+@@ -327,111 +339,36 @@ class BaseParser:
+             return 'EOF'
+ 
+     @property
+-    def matched_text(self) -> str:
+-        if self.last_match is not None:
+-            return self.last_match.group()
+-        else:
+-            return None
+-
+-    def read_rest(self) -> str:
+-        rv = self.definition[self.pos:]
+-        self.pos = self.end
+-        return rv
+-
+-    def assert_end(self, *, allowSemicolon: bool = False) -> None:
+-        self.skip_ws()
+-        if allowSemicolon:
+-            if not self.eof and self.definition[self.pos:] != ';':
+-                self.fail('Expected end of definition or ;.')
+-        else:
+-            if not self.eof:
+-                self.fail('Expected end of definition.')
+-
+-    ################################################################################
+-
+-    @property
+-    def id_attributes(self):
+-        raise NotImplementedError
++    def current_rest(self) -> str:
++        return self.definition[self.pos:]
+ 
+-    @property
+-    def paren_attributes(self):
+-        raise NotImplementedError
++    def parse_string(self) -> str:
++        if self.current_char != '"':
++            return None
++        startPos = self.pos
++        self.pos += 1
++        escape = False
++        while not self.eof:
++            # an escaped quote
++            if escape:
++                escape = False
++            elif self.definition[self.pos] == '\\':
++                escape = True
++            elif self.definition[self.pos] == '"':
++                self.pos += 1
++                return self.definition[startPos:self.pos]
++            self.pos += 1
++        return None
+ 
+-    def _parse_balanced_token_seq(self, end: List[str]) -> str:
+-        # TODO: add handling of string literals and similar
+-        brackets = {'(': ')', '[': ']', '{': '}'}
++    def parse_udl_suffix(self) -> str:
++        # Return everything after a numeric literal that can be a UDL suffix
++        # Must be an identifier-like sequence
+         startPos = self.pos
+-        symbols = []  # type: List[str]
+         while not self.eof:
+-            if len(symbols) == 0 and self.current_char in end:
++            c = self.definition[self.pos]
++            if not (c.isalnum() or c == '_'):
+                 break
+-            if self.current_char in brackets.keys():
+-                symbols.append(brackets[self.current_char])
+-            elif len(symbols) > 0 and self.current_char == symbols[-1]:
+-                symbols.pop()
+-            elif self.current_char in ")]}":
+-                self.fail("Unexpected '%s' in balanced-token-seq." % self.current_char)
+             self.pos += 1
+-        if self.eof:
+-            self.fail("Could not find end of balanced-token-seq starting at %d."
+-                      % startPos)
+-        return self.definition[startPos:self.pos]
+-
+-    def _parse_attribute(self) -> ASTAttribute:
+-        self.skip_ws()
+-        # try C++11 style
+-        startPos = self.pos
+-        if self.skip_string_and_ws('['):
+-            if not self.skip_string('['):
+-                self.pos = startPos
+-            else:
+-                # TODO: actually implement the correct grammar
+-                arg = self._parse_balanced_token_seq(end=[']'])
+-                if not self.skip_string_and_ws(']'):
+-                    self.fail("Expected ']' in end of attribute.")
+-                if not self.skip_string_and_ws(']'):
+-                    self.fail("Expected ']' in end of attribute after [[...]")
+-                return ASTCPPAttribute(arg)
+-
+-        # try GNU style
+-        if self.skip_word_and_ws('__attribute__'):
+-            if not self.skip_string_and_ws('('):
+-                self.fail("Expected '(' after '__attribute__'.")
+-            if not self.skip_string_and_ws('('):
+-                self.fail("Expected '(' after '__attribute__('.")
+-            attrs = []
+-            while 1:
+-                if self.match(identifier_re):
+-                    name = self.matched_text
+-                    self.skip_ws()
+-                    if self.skip_string_and_ws('('):
+-                        self.fail('Parameterized GNU style attribute not yet supported.')
+-                    attrs.append(ASTGnuAttribute(name, None))
+-                    # TODO: parse arguments for the attribute
+-                if self.skip_string_and_ws(','):
+-                    continue
+-                elif self.skip_string_and_ws(')'):
+-                    break
+-                else:
+-                    self.fail("Expected identifier, ')', or ',' in __attribute__.")
+-            if not self.skip_string_and_ws(')'):
+-                self.fail("Expected ')' after '__attribute__((...)'")
+-            return ASTGnuAttributeList(attrs)
+-
+-        # try the simple id attributes defined by the user
+-        for id in self.id_attributes:
+-            if self.skip_word_and_ws(id):
+-                return ASTIdAttribute(id)
+-
+-        # try the paren attributes defined by the user
+-        for id in self.paren_attributes:
+-            if not self.skip_string_and_ws(id):
+-                continue
+-            if not self.skip_string('('):
+-                self.fail("Expected '(' after user-defined paren-attribute.")
+-            arg = self._parse_balanced_token_seq(end=[')'])
+-            if not self.skip_string(')'):
+-                self.fail("Expected ')' to end user-defined paren-attribute.")
+-            return ASTParenAttribute(id, arg)
+-
+-        return None
++        if startPos == self.pos:
++            return None
++        return self.definition[startPos:self.pos]
+\ No newline at end of file

@@ -13,25 +13,31 @@ FAIL ./bottle-song.spec.js
   Bottle Song
     verse
       single verse
-        ✕ first generic verse (4 ms)
+        ✕ first generic verse (6 ms)
         ✕ last generic verse (1 ms)
         ✕ verse with 2 bottles (1 ms)
         ✕ verse with 1 bottle (1 ms)
     lyrics
       multiple verses
-        ✕ first two verses (1 ms)
-        ✕ last three verses (1 ms)
-        ✕ all verses
+        ✕ first two verses (2 ms)
+        ✕ last three verses (2 ms)
+        ✕ all verses (3 ms)
 
   ● Bottle Song › verse › single verse › first generic verse
 
     expect(received).toEqual(expected) // deep equality
 
-    Expected: ["Ten green bottles hanging on the wall,", "Ten green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be nine green bottles hanging on the wall."]
-    Received: "Ten green bottles hanging on the wall,
-    Ten green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be nine green bottles hanging on the wall."
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+    -   "Ten green bottles hanging on the wall,",
+    -   "Ten green bottles hanging on the wall,",
+    +   "ten green bottles hanging on the wall,",
+    +   "ten green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be nine green bottles hanging on the wall.",
+      ]
 
       11 |           `There'll be nine green bottles hanging on the wall.`,
       12 |         ];
@@ -47,11 +53,17 @@ FAIL ./bottle-song.spec.js
 
     expect(received).toEqual(expected) // deep equality
 
-    Expected: ["Three green bottles hanging on the wall,", "Three green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be two green bottles hanging on the wall."]
-    Received: "Three green bottles hanging on the wall,
-    Three green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be two green bottles hanging on the wall."
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+    -   "Three green bottles hanging on the wall,",
+    -   "Three green bottles hanging on the wall,",
+    +   "three green bottles hanging on the wall,",
+    +   "three green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be two green bottles hanging on the wall.",
+      ]
 
       21 |           `There'll be two green bottles hanging on the wall.`,
       22 |         ];
@@ -67,11 +79,17 @@ FAIL ./bottle-song.spec.js
 
     expect(received).toEqual(expected) // deep equality
 
-    Expected: ["Two green bottles hanging on the wall,", "Two green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be one green bottle hanging on the wall."]
-    Received: "Two green bottles hanging on the wall,
-    Two green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be one green bottle hanging on the wall."
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+    -   "Two green bottles hanging on the wall,",
+    -   "Two green bottles hanging on the wall,",
+    +   "two green bottles hanging on the wall,",
+    +   "two green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be one green bottle hanging on the wall.",
+      ]
 
       31 |           `There'll be one green bottle hanging on the wall.`,
       32 |         ];
@@ -87,11 +105,17 @@ FAIL ./bottle-song.spec.js
 
     expect(received).toEqual(expected) // deep equality
 
-    Expected: ["One green bottle hanging on the wall,", "One green bottle hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be no green bottles hanging on the wall."]
-    Received: "One green bottle hanging on the wall,
-    One green bottle hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be no green bottles hanging on the wall."
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+    -   "One green bottle hanging on the wall,",
+    -   "One green bottle hanging on the wall,",
+    +   "one green bottle hanging on the wall,",
+    +   "one green bottle hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be no green bottles hanging on the wall.",
+      ]
 
       41 |           `There'll be no green bottles hanging on the wall.`,
       42 |         ];
@@ -107,15 +131,24 @@ FAIL ./bottle-song.spec.js
 
     expect(received).toEqual(expected) // deep equality
 
-    Expected: ["Ten green bottles hanging on the wall,", "Ten green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be nine green bottles hanging on the wall.", "", "Nine green bottles hanging on the wall,", "Nine green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be eight green bottles hanging on the wall."]
-    Received: "Ten green bottles hanging on the wall,
-    Ten green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be nine green bottles hanging on the wall.·
-    Nine green bottles hanging on the wall,
-    Nine green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be eight green bottles hanging on the wall."
+    - Expected  - 4
+    + Received  + 4
+
+      Array [
+    -   "Ten green bottles hanging on the wall,",
+    -   "Ten green bottles hanging on the wall,",
+    +   "ten green bottles hanging on the wall,",
+    +   "ten green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be nine green bottles hanging on the wall.",
+        "",
+    -   "Nine green bottles hanging on the wall,",
+    -   "Nine green bottles hanging on the wall,",
+    +   "nine green bottles hanging on the wall,",
+    +   "nine green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be eight green bottles hanging on the wall.",
+      ]
 
       60 |           `There'll be eight green bottles hanging on the wall.`,
       61 |         ];
@@ -131,19 +164,31 @@ FAIL ./bottle-song.spec.js
 
     expect(received).toEqual(expected) // deep equality
 
-    Expected: ["Three green bottles hanging on the wall,", "Three green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be two green bottles hanging on the wall.", "", "Two green bottles hanging on the wall,", "Two green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be one green bottle hanging on the wall.", "", …]
-    Received: "Three green bottles hanging on the wall,
-    Three green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be two green bottles hanging on the wall.·
-    Two green bottles hanging on the wall,
-    Two green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be one green bottle hanging on the wall.·
-    One green bottle hanging on the wall,
-    One green bottle hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be no green bottles hanging on the wall."
+    - Expected  - 6
+    + Received  + 6
+
+      Array [
+    -   "Three green bottles hanging on the wall,",
+    -   "Three green bottles hanging on the wall,",
+    +   "three green bottles hanging on the wall,",
+    +   "three green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be two green bottles hanging on the wall.",
+        "",
+    -   "Two green bottles hanging on the wall,",
+    -   "Two green bottles hanging on the wall,",
+    +   "two green bottles hanging on the wall,",
+    +   "two green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be one green bottle hanging on the wall.",
+        "",
+    -   "One green bottle hanging on the wall,",
+    -   "One green bottle hanging on the wall,",
+    +   "one green bottle hanging on the wall,",
+    +   "one green bottle hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be no green bottles hanging on the wall.",
+      ]
 
       80 |           `There'll be no green bottles hanging on the wall.`,
       81 |         ];
@@ -159,47 +204,80 @@ FAIL ./bottle-song.spec.js
 
     expect(received).toEqual(expected) // deep equality
 
-    Expected: ["Ten green bottles hanging on the wall,", "Ten green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be nine green bottles hanging on the wall.", "", "Nine green bottles hanging on the wall,", "Nine green bottles hanging on the wall,", "And if one green bottle should accidentally fall,", "There'll be eight green bottles hanging on the wall.", "", …]
-    Received: "Ten green bottles hanging on the wall,
-    Ten green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be nine green bottles hanging on the wall.·
-    Nine green bottles hanging on the wall,
-    Nine green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be eight green bottles hanging on the wall.·
-    Eight green bottles hanging on the wall,
-    Eight green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be seven green bottles hanging on the wall.·
-    Seven green bottles hanging on the wall,
-    Seven green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be six green bottles hanging on the wall.·
-    Six green bottles hanging on the wall,
-    Six green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be five green bottles hanging on the wall.·
-    Five green bottles hanging on the wall,
-    Five green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be four green bottles hanging on the wall.·
-    Four green bottles hanging on the wall,
-    Four green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be three green bottles hanging on the wall.·
-    Three green bottles hanging on the wall,
-    Three green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be two green bottles hanging on the wall.·
-    Two green bottles hanging on the wall,
-    Two green bottles hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be one green bottle hanging on the wall.·
-    One green bottle hanging on the wall,
-    One green bottle hanging on the wall,
-    And if one green bottle should accidentally fall,
-    There'll be no green bottles hanging on the wall."
+    - Expected  - 20
+    + Received  + 20
+
+      Array [
+    -   "Ten green bottles hanging on the wall,",
+    -   "Ten green bottles hanging on the wall,",
+    +   "ten green bottles hanging on the wall,",
+    +   "ten green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be nine green bottles hanging on the wall.",
+        "",
+    -   "Nine green bottles hanging on the wall,",
+    -   "Nine green bottles hanging on the wall,",
+    +   "nine green bottles hanging on the wall,",
+    +   "nine green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be eight green bottles hanging on the wall.",
+        "",
+    -   "Eight green bottles hanging on the wall,",
+    -   "Eight green bottles hanging on the wall,",
+    +   "eight green bottles hanging on the wall,",
+    +   "eight green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be seven green bottles hanging on the wall.",
+        "",
+    -   "Seven green bottles hanging on the wall,",
+    -   "Seven green bottles hanging on the wall,",
+    +   "seven green bottles hanging on the wall,",
+    +   "seven green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be six green bottles hanging on the wall.",
+        "",
+    -   "Six green bottles hanging on the wall,",
+    -   "Six green bottles hanging on the wall,",
+    +   "six green bottles hanging on the wall,",
+    +   "six green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be five green bottles hanging on the wall.",
+        "",
+    -   "Five green bottles hanging on the wall,",
+    -   "Five green bottles hanging on the wall,",
+    +   "five green bottles hanging on the wall,",
+    +   "five green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be four green bottles hanging on the wall.",
+        "",
+    -   "Four green bottles hanging on the wall,",
+    -   "Four green bottles hanging on the wall,",
+    +   "four green bottles hanging on the wall,",
+    +   "four green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be three green bottles hanging on the wall.",
+        "",
+    -   "Three green bottles hanging on the wall,",
+    -   "Three green bottles hanging on the wall,",
+    +   "three green bottles hanging on the wall,",
+    +   "three green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be two green bottles hanging on the wall.",
+        "",
+    -   "Two green bottles hanging on the wall,",
+    -   "Two green bottles hanging on the wall,",
+    +   "two green bottles hanging on the wall,",
+    +   "two green bottles hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be one green bottle hanging on the wall.",
+        "",
+    -   "One green bottle hanging on the wall,",
+    -   "One green bottle hanging on the wall,",
+    +   "one green bottle hanging on the wall,",
+    +   "one green bottle hanging on the wall,",
+        "And if one green bottle should accidentally fall,",
+        "There'll be no green bottles hanging on the wall.",
+      ]
 
       135 |           `There'll be no green bottles hanging on the wall.`,
       136 |         ];
@@ -214,5 +292,5 @@ FAIL ./bottle-song.spec.js
 Test Suites: 1 failed, 1 total
 Tests:       7 failed, 7 total
 Snapshots:   0 total
-Time:        0.695 s
+Time:        0.685 s
 Ran all test suites matching ./LICENSE|./babel.config.js|./bottle-song.js|./bottle-song.spec.js|./eval.sh|./node_modules|./package-lock.json|./package.json.

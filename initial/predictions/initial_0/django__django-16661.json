@@ -1,6 +1,7 @@
 {
     "instance_id": "django__django-16661",
-    "model_name_or_path": "nerf_editwholefiles_0",
-    "model_patch": "",
-    "proposed_model_patches": []
+    "model_name_or_path": "initial",
+    "model_patch": "diff --git a/tests/modeladmin/test_lookup_onetoone.py b/tests/modeladmin/test_lookup_onetoone.py\nnew file mode 100644\nindex 0000000000..dbccfc461a\n--- /dev/null\n+++ b/tests/modeladmin/test_lookup_onetoone.py\n@@ -0,0 +1,35 @@\n+from django.contrib.admin import ModelAdmin\n+from django.contrib.admin.sites import AdminSite\n+from django.db import models\n+from django.test import TestCase\n+from django.test.utils import isolate_apps\n+\n+\n+class ModelAdminLookupTest(TestCase):\n+    def setUp(self):\n+        self.site = AdminSite()\n+\n+    @isolate_apps('modeladmin')\n+    def test_lookup_allowed_foreign_primary(self):\n+        class Country(models.Model):\n+            name = models.CharField(max_length=256)\n+\n+        class Place(models.Model):\n+            country = models.ForeignKey(Country, models.CASCADE)\n+\n+        class Restaurant(models.Model):\n+            place = models.OneToOneField(Place, models.CASCADE, primary_key=True)\n+\n+        class Waiter(models.Model):\n+            restaurant = models.ForeignKey(Restaurant, models.CASCADE)\n+\n+        class WaiterAdmin(ModelAdmin):\n+            list_filter = [\n+                'restaurant__place__country',\n+            ]\n+\n+        ma = WaiterAdmin(Waiter, self.site)\n+        self.assertIs(\n+            ma.lookup_allowed('restaurant__place__country', 'test_value'), \n+            True\n+        )\n\\ No newline at end of file\n",
+    "proposed_model_patches": [],
+    "success": true
 }

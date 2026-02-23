@@ -6,10 +6,10 @@
         "resolved": false,
         "tests_status": {
             "FAIL_TO_PASS": {
-                "success": [
+                "success": [],
+                "failure": [
                     "tests/test_build_gettext.py::test_Catalog_duplicated_message"
-                ],
-                "failure": []
+                ]
             },
             "PASS_TO_PASS": {
                 "success": [

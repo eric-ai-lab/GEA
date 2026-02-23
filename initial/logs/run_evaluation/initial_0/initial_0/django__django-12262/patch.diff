@@ -1,14 +1,21 @@
 diff --git a/django/template/library.py b/django/template/library.py
-index 20bc86dac8..b6ef802fee 100644
+index 20bc86dac8..29fb42335b 100644
 --- a/django/template/library.py
 +++ b/django/template/library.py
-@@ -255,13 +255,16 @@ def parse_bits(parser, bits, params, varargs, varkw, defaults,
+@@ -255,32 +255,45 @@ def parse_bits(parser, bits, params, varargs, varkw, defaults,
          kwarg for kwarg in kwonly
          if not kwonly_defaults or kwarg not in kwonly_defaults
      ]
 +
-+    valid_param_set = set(params + list(kwonly))
-+    
++    # Create a set of all valid keyword arguments
++    valid_kwargs = set(params)
++    if kwonly:  # Always add all keyword-only arguments, regardless of defaults
++        valid_kwargs.update(kwonly)
++    if varkw is not None:
++        valid_kwargs = None  # Allow any kwargs when varkw is present
++
++    seen_bits = {}  # Track bits by parameter name
++
      for bit in bits:
          # First we try to extract a potential kwarg from the bit
          kwarg = token_kwargs([bit], parser)
@@ -16,14 +23,53 @@ index 20bc86dac8..b6ef802fee 100644
              # The kwarg was successfully extracted
              param, value = kwarg.popitem()
 -            if param not in params and param not in unhandled_kwargs and varkw is None:
-+            if param not in valid_param_set and varkw is None:
-                 # An unexpected keyword argument was supplied
+-                # An unexpected keyword argument was supplied
++
++            if param in seen_bits:
++                # The keyword argument has already been supplied
                  raise TemplateSyntaxError(
-                     "'%s' received unexpected keyword argument '%s'" %
-@@ -325,4 +328,4 @@ def import_library(name):
+-                    "'%s' received unexpected keyword argument '%s'" %
++                    "'%s' received multiple values for keyword argument '%s'" %
+                     (name, param))
+-            elif param in kwargs:
+-                # The keyword argument has already been supplied once
++
++            seen_bits[param] = value
++
++            if valid_kwargs is not None and param not in valid_kwargs:
++                # An unexpected keyword argument was supplied
+                 raise TemplateSyntaxError(
+-                    "'%s' received multiple values for keyword argument '%s'" %
++                    "'%s' received unexpected keyword argument '%s'" %
+                     (name, param))
+-            else:
+-                # All good, record the keyword argument
+-                kwargs[str(param)] = value
+-                if param in unhandled_params:
+-                    # If using the keyword syntax for a positional arg, then
+-                    # consume it.
+-                    unhandled_params.remove(param)
+-                elif param in unhandled_kwargs:
+-                    # Same for keyword-only arguments
+-                    unhandled_kwargs.remove(param)
++
++            kwargs[str(param)] = value
++            if param in unhandled_params:
++                # If using the keyword syntax for a positional arg, then
++                # consume it.
++                unhandled_params.remove(param)
++            elif param in unhandled_kwargs:
++                # Same for keyword-only arguments
++                unhandled_kwargs.remove(param)
+         else:
+             if kwargs:
+                 raise TemplateSyntaxError(
+@@ -324,5 +337,5 @@ def import_library(name):
+         return module.register
      except AttributeError:
          raise InvalidTemplateLibrary(
-             "Module  %s does not have a variable named 'register'" % name,
+-            "Module  %s does not have a variable named 'register'" % name,
 -        )
++            "Module %s does not have a variable named 'register'" % name,
 +        )
 \ No newline at end of file

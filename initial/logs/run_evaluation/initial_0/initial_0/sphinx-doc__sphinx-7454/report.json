@@ -12,7 +12,8 @@
                 ]
             },
             "PASS_TO_PASS": {
-                "success": [
+                "success": [],
+                "failure": [
                     "tests/test_domain_py.py::test_function_signatures",
                     "tests/test_domain_py.py::test_domain_py_xrefs",
                     "tests/test_domain_py.py::test_domain_py_objects",
@@ -40,8 +41,7 @@
                     "tests/test_domain_py.py::test_module_index_submodule",
                     "tests/test_domain_py.py::test_module_index_not_collapsed",
                     "tests/test_domain_py.py::test_modindex_common_prefix"
-                ],
-                "failure": []
+                ]
             },
             "FAIL_TO_FAIL": {
                 "success": [],

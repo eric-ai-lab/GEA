@@ -170,19 +170,22 @@ index daa028a0f7..38e673a096 100644
          nfd = text.Truncator('ou\u0308ou\u0308ou\u0308ou\u0308')
 + git diff 838e432e3e5519c5383d12018e6c78f8ec7833c1
 diff --git a/django/db/models/aggregates.py b/django/db/models/aggregates.py
-index ac0b62d0bf..6f89e5015b 100644
+index ac0b62d0bf..092261deea 100644
 --- a/django/db/models/aggregates.py
 +++ b/django/db/models/aggregates.py
-@@ -14,7 +14,7 @@ __all__ = [
+@@ -68,7 +68,10 @@ class Aggregate(Func):
+         return []
  
- 
- class Aggregate(Func):
--    template = '%(function)s(%(distinct)s%(expressions)s)'
-+    template = '%(function)s(%(distinct)s %(expressions)s)'  # Note: Added space after distinct placeholder
-     contains_aggregate = True
-     name = None
-     filter_template = '%s FILTER (WHERE %%(filter)s)'
-@@ -152,4 +152,4 @@ class Variance(NumericOutputFieldMixin, Aggregate):
+     def as_sql(self, compiler, connection, **extra_context):
+-        extra_context['distinct'] = 'DISTINCT' if self.distinct else ''
++        if self.distinct:
++            extra_context['distinct'] = 'DISTINCT '  # Add space after DISTINCT
++        else:
++            extra_context['distinct'] = ''
+         if self.filter:
+             if connection.features.supports_aggregate_filter_clause:
+                 filter_sql, filter_params = self.filter.as_sql(compiler, connection)
+@@ -152,4 +155,4 @@ class Variance(NumericOutputFieldMixin, Aggregate):
          super().__init__(expression, **extra)
  
      def _get_repr_options(self):
@@ -315,7 +318,7 @@ export CONDA_PYTHON_EXE='\''/opt/miniconda3/bin/python'\'''
 + hash -r
 + python -m pip install -e .
 Obtaining file:///testbed
-Requirement already satisfied: pytz in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.0.dev20190119234541) (2024.2)
+Requirement already satisfied: pytz in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.0.dev20190119234541) (2025.2)
 Requirement already satisfied: sqlparse in /opt/miniconda3/envs/testbed/lib/python3.6/site-packages (from Django==3.0.dev20190119234541) (0.4.4)
 Installing collected packages: Django
   Attempting uninstall: Django
@@ -360,7 +363,7 @@ test_complex_aggregations_require_kwarg (aggregation.tests.AggregateTestCase) ..
 test_complex_values_aggregation (aggregation.tests.AggregateTestCase) ... ok
 test_count (aggregation.tests.AggregateTestCase) ... ok
 test_count_distinct_expression (aggregation.tests.AggregateTestCase) ... ok
-test_count_star (aggregation.tests.AggregateTestCase) ... FAIL
+test_count_star (aggregation.tests.AggregateTestCase) ... ok
 test_dates_with_aggregation (aggregation.tests.AggregateTestCase) ... ok
 test_decimal_max_digits_has_no_effect (aggregation.tests.AggregateTestCase) ... ok
 test_empty_aggregate (aggregation.tests.AggregateTestCase) ... ok
@@ -414,18 +417,10 @@ Running migrations:
 System check identified no issues (0 silenced).
 ok
 
-======================================================================
-FAIL: test_count_star (aggregation.tests.AggregateTestCase)
 ----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/testbed/tests/aggregation/tests.py", line 397, in test_count_star
-    self.assertIn('SELECT COUNT(*) ', sql)
-AssertionError: 'SELECT COUNT(*) ' not found in 'SELECT COUNT( *) AS "n" FROM "aggregation_book"'
+Ran 56 tests in 0.090s
 
-----------------------------------------------------------------------
-Ran 56 tests in 0.096s
-
-FAILED (failures=1)
+OK
 Destroying test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')…
 + git checkout 838e432e3e5519c5383d12018e6c78f8ec7833c1 tests/aggregation/tests.py
 Updated 1 path from 1c649d7c2f

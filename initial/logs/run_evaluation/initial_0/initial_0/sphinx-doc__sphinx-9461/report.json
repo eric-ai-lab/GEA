@@ -14,8 +14,7 @@
                 ]
             },
             "PASS_TO_PASS": {
-                "success": [],
-                "failure": [
+                "success": [
                     "tests/test_domain_py.py::test_function_signatures",
                     "tests/test_domain_py.py::test_domain_py_xrefs",
                     "tests/test_domain_py.py::test_domain_py_xrefs_abbreviations",
@@ -75,7 +74,8 @@
                     "tests/test_ext_autodoc_autoclass.py::test_class_alias",
                     "tests/test_ext_autodoc_autoclass.py::test_class_alias_having_doccomment",
                     "tests/test_ext_autodoc_autoproperty.py::test_properties"
-                ]
+                ],
+                "failure": []
             },
             "FAIL_TO_FAIL": {
                 "success": [],

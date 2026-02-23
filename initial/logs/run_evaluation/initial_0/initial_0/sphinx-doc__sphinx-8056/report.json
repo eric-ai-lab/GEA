@@ -12,7 +12,8 @@
                 ]
             },
             "PASS_TO_PASS": {
-                "success": [
+                "success": [],
+                "failure": [
                     "tests/test_ext_napoleon_docstring.py::NamedtupleSubclassTest::test_attributes_docstring",
                     "tests/test_ext_napoleon_docstring.py::InlineAttributeTest::test_class_data_member",
                     "tests/test_ext_napoleon_docstring.py::InlineAttributeTest::test_class_data_member_inline",
@@ -53,8 +54,7 @@
                     "tests/test_ext_napoleon_docstring.py::TestNumpyDocstring::test_escape_args_and_kwargs[x,",
                     "tests/test_ext_napoleon_docstring.py::TestNumpyDocstring::test_escape_args_and_kwargs[*args,",
                     "tests/test_ext_napoleon_docstring.py::TestNumpyDocstring::test_escape_args_and_kwargs[*x,"
-                ],
-                "failure": []
+                ]
             },
             "FAIL_TO_FAIL": {
                 "success": [],
