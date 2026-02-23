@@ -76,24 +76,20 @@ By default, outputs will be saved in the `output_dgm/` directory.
 - `coding_agent.py` main implementation of the initial coding agent
 - `GEA_outer.py` entry point for running the GEA algorithm
 
-## Logs from Experiments
-This [google drive folder](https://drive.google.com/drive/folders/1Kcu9TbIa9Z50pJ7S6hH9omzzD1pxIYZC?usp=sharing) contains all the foundation model output logs from the experiments shown in the paper.
 
-## Safety Consideration
-> [!WARNING]  
-> This repository involves executing untrusted, model-generated code. We strongly advise users to be aware of the associated safety risks. While it is highly unlikely that such code will perform overtly malicious actions under our current settings and with the models we use, it may still behave destructively due to limitations in model capability or alignment. By using this repository, you acknowledge and accept these risks.
 
 ## Acknowledgement
+This codebase is built upon the [Darwin Gödel Machine (DGM)](https://github.com/jennyzzt/dgm/tree/main).  We sincerely thank the authors for their inspiring and impactful work.
 
 The evaluation framework implementations are based on the [SWE-bench](https://github.com/swe-bench/SWE-bench) and [polyglot-benchmark](https://github.com/Aider-AI/polyglot-benchmark) repositories.
 
 ## Citing
 If you find this project useful, please consider citing:
 ```bibtex
-@article{zhang2025darwin,
-  title={Darwin Godel Machine: Open-Ended Evolution of Self-Improving Agents},
-  author={Zhang, Jenny and Hu, Shengran and Lu, Cong and Lange, Robert and Clune, Jeff},
-  journal={arXiv preprint arXiv:2505.22954},
-  year={2025}
+@article{weng2026group,
+  title={Group-Evolving Agents: Open-Ended Self-Improvement via Experience Sharing},
+  author={Weng, Zhaotian and Antoniades, Antonis and Nathani, Deepak and Zhang, Zhen and Pu, Xiao and Wang, Xin Eric},
+  journal={arXiv preprint arXiv:2602.04837},
+  year={2026}
 }
 ```
