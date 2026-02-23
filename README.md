@@ -3,7 +3,9 @@
 </h1>
 
 <p align="center">
-  <a href="[https://arxiv.org/abs/2505.22954](https://arxiv.org/pdf/2602.04837)"><img src="https://img.shields.io/badge/arXiv-2505.22954-b31b1b.svg?logo=arxiv&style=for-the-badge"></a>
+  <a href="https://arxiv.org/abs/2602.04837">
+    <img src="https://img.shields.io/badge/arXiv-2602.04837-b31b1b.svg?logo=arxiv&style=for-the-badge">
+  </a>
 </p>
 
 
