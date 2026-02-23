@@ -64,7 +64,6 @@ python -m polyglot.prepare_polyglot_dataset
 ```bash
 python GEA_outer.py
 ```
-By default, outputs will be saved in the `output_dgm/` directory.
 
 ## File Structure
 - `analysis/` scripts used for plotting and analysis
@@ -73,7 +72,6 @@ By default, outputs will be saved in the `output_dgm/` directory.
 - `swe_bench/` code needed for SWE-bench evaluation
 - `polyglot/` code needed for Polyglot evaluation
 - `prompts/` prompts used for foundation models
-- `tests/` tests for the DGM system
 - `tools/` tools available to the foundation models
 - `coding_agent.py` main implementation of the initial coding agent
 - `GEA_outer.py` entry point for running the GEA algorithm
