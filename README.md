@@ -10,7 +10,7 @@
 Repository for **Group Evolving Agents (GEA)**, a new paradigm for open-ended self-improvements, which treats a group of agents as the fundamental evolutionary unit, enabling explicit experience sharing and reuse within the group throughout evolution. 
 
 <p align="center">
-  <img src="./misc/overview.gif" width="100%" height="auto" />
+  <img src="./misc/pipeline_overview.png" width="100%" height="auto" />
 </p>
 <!-- <p align="center">
 <img src="./misc/conceptual.svg"/></a><br>
