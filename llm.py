@@ -202,12 +202,6 @@ def get_response_from_llm(
         msg_history = []
 
     if "claude" in model:
-        print(f"[Claude Self-Modification] 这里是llm.py中的get_response_from_llm函数,186行,入口参数model: {model}"+"\n")
-        print(f"[Claude Self-Modification] 这里是llm.py中的get_response_from_llm函数,186行,入口参数client: {client}"+"\n")
-        print(f"[Claude Self-Modification] 这里是llm.py中的get_response_from_llm函数,186行,入口参数msg_history: {msg_history}"+"\n")
-        print(f"[Claude Self-Modification] 这里是llm.py中的get_response_from_llm函数,186行,入口参数system_message: {system_message}"+"\n")
-        print(f"[Claude Self-Modification] 这里是llm.py中的get_response_from_llm函数,186行,入口参数temperature: {temperature}"+"\n")
-        print(f"[Claude Self-Modification] 这里是llm.py中的get_response_from_llm函数,186行,入口参数MAX_OUTPUT_TOKENS: {MAX_OUTPUT_TOKENS}"+"\n")
         new_msg_history = msg_history + [
             {
                 "role": "user",
@@ -240,13 +234,6 @@ def get_response_from_llm(
         ]
     elif model.startswith("gpt-4o-") or model.startswith("gpt-5") or model.startswith("glm-"):
         new_msg_history = msg_history + [{"role": "user", "content": msg}]
-        if model.startswith("glm-"):
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,219行,Making chat.completions.create call to GLM model: {model}"+"\n")
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,219行,入口参数client: {client}"+"\n")
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,219行,入口参数new_msg_history: {new_msg_history}"+"\n")
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,219行,入口参数system_message: {system_message}"+"\n")
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,219行,入口参数temperature: {temperature}"+"\n")
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,219行,入口参数MAX_OUTPUT_TOKENS: {MAX_OUTPUT_TOKENS}"+"\n")
         
         # GPT-5 series uses max_completion_tokens instead of max_tokens
         if model.startswith("gpt-5"):
@@ -277,9 +264,7 @@ def get_response_from_llm(
             )
         content = response.choices[0].message.content
         if model.startswith("glm-"):
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,234行,Successfully received response from GLM. Content length: {len(content)} chars"+"\n")
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,235行,Content: {content}"+"\n")
-            print(f"[GLM Self-Modification] 这里是llm.py中的get_response_from_llm函数,236行,glm的response是:{response}"+"\n")
+            print("")
         new_msg_history = new_msg_history + [{"role": "assistant", "content": content}]
     elif model.startswith("o1-") or model.startswith("o3-"):
         new_msg_history = msg_history + [{"role": "user", "content": system_message + msg}]
@@ -353,8 +338,6 @@ def get_response_from_llm(
         print(f'Assistant: {new_msg_history[-1]["content"]}')
         print("*" * 21 + " LLM END " + "*" * 21)
         print()
-    print(f"[{model}] Self-Modification] 这里是llm.py中的get_response_from_llm函数,315行,返回值是new_msg_history是: {new_msg_history}"+"\n")
-    print(f"[{model}] Self-Modification] 这里是llm.py中的get_response_from_llm函数,315行,返回值是content是: {content}"+"\n")
     return content, new_msg_history
 
 def extract_json_between_markers(llm_output):

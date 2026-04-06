@@ -134,15 +134,14 @@ def diagnose_problem(entry, commit, root_dir, out_dir, patch_files=[], max_attem
             patch_files=patch_files,
         )
     else:
-        print(f"这里是self_improve_step.py的diagnose_problem函数268行，进入selfimprove流程或者group_improve分支中的p1/p2分支,非polyglot，混合父代是否开启: {group_improve}，查看参数,entry: {entry},commit: {commit},root_dir: {root_dir},out_dir: {out_dir},patch_files: {patch_files},max_attempts: {max_attempts},polyglot: {polyglot},dataset: {dataset}")
-        # safe_log(f"entry: {entry}")
-        # safe_log(f"commit: {commit}")
-        # safe_log(f"root_dir: {root_dir}")
-        # safe_log(f"out_dir: {out_dir}")
-        # safe_log(f"patch_files: {patch_files}")
-        # safe_log(f"max_attempts: {max_attempts}")
-        # safe_log(f"polyglot: {polyglot}")
-        # safe_log(f"dataset: {dataset}")
+        safe_log(f"entry: {entry}")
+        safe_log(f"commit: {commit}")
+        safe_log(f"root_dir: {root_dir}")
+        safe_log(f"out_dir: {out_dir}")
+        safe_log(f"patch_files: {patch_files}")
+        safe_log(f"max_attempts: {max_attempts}")
+        safe_log(f"polyglot: {polyglot}")
+        safe_log(f"dataset: {dataset}")
         diagnose_sys_message, diagnose_prompt = get_diagnose_prompt_swe(
             entry, commit, root_dir, out_dir, dataset,
             patch_files=patch_files,
@@ -426,7 +425,6 @@ def self_improve(
    
         patch_files = get_model_patch_paths(root_dir, os.path.join(output_dir, '../'), actual_parent_commit)
         patch_files1 = get_model_patch_paths(root_dir, os.path.join(output_dir, '../'), parent_commit1)
-        print(f"这里是self_improve_step.py的self_improve函数570行，进入group_improve分支中的混合父代分支，混合父代机制是否开启:{group_improve},entry0: {entry0}, entry1: {entry1}, parent_commit0: {parent_commit0}, parent_commit1: {parent_commit1},获得patch_files:{patch_files}和patch_files1: {patch_files1}")
         if run_baseline not in ['no_selfimprove']:
             for patch_file in patch_files:
                 ensure_patch_file_newline(patch_file)  # double insurance: valid format for patch command
@@ -438,7 +436,6 @@ def self_improve(
     
     else: #只要不是group_improve分支中的混合父代分支，都走这个分支,包括self_improve,因为都是1v1进化，不用特殊处理
         patch_files = get_model_patch_paths(root_dir, os.path.join(output_dir, '../'), parent_commit)
-        print(f"这里是self_improve_step.py的self_improve函数584行，进入self_improve或者group_improve分支中的p1/p2分支了,混合父代机制是否开启: {group_improve},获得patch_files: {patch_files},entry: {entry},parent_commit: {parent_commit}")
         if run_baseline not in ['no_selfimprove']:
             for patch_file in patch_files:
                 ensure_patch_file_newline(patch_file)  # double insurance: valid format for patch command
@@ -463,7 +460,6 @@ def self_improve(
 
     # Get tasks to improve
     if entry:
-        print(f"这里是self_improve_step.py的self_improve函数609行，entry: {entry},parent_commit: {parent_commit},root_dir: {root_dir},out_dir_base: {out_dir_base},patch_files: {patch_files},混合父代机制是否开启: {group_improve}")
         safe_log(f"Task to improve: {entry}")
         # safe_log(f"parent_commit: {parent_commit}")
         # safe_log(f"root_dir: {root_dir}")
@@ -471,7 +467,6 @@ def self_improve(
         # safe_log(f"patch_files: {patch_files}")
         # Handle group improvement entries
         if group_improve:
-            print(f"Group improvement mode: {entry} with parent_commit: {parent_commit}")
             problem_statement = diagnose_problem(entry0, parent_commit0, root_dir, out_dir_base, patch_files=patch_files, polyglot=polyglot, group_improve=True, entry1=entry1, commit1=parent_commit1,patch_files1=patch_files1, coding_agent=coding_agent, diagnose_model=diagnose_model)
         else:
             problem_statement = diagnose_problem(entry, parent_commit, root_dir, out_dir_base, patch_files=patch_files, polyglot=polyglot, coding_agent=coding_agent, diagnose_model=diagnose_model)

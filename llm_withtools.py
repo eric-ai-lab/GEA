@@ -562,8 +562,6 @@ def chat_with_agent_glm(
         # Load all tools
         all_tools = load_all_tools(logging=logging)
         tools_dict = {tool['info']['name']: tool for tool in all_tools}
-        print(f"这里是llm_withtools.py中的chat_with_agent_glm函数376行，all_tools: {all_tools}"+"\n")
-        print(f"这里是llm_withtools.py中的chat_with_agent_glm函数377行，tools_dict: {tools_dict}"+"\n")
 
         # Create client
         # logging(f"[GLM Self-Modification] Creating client for model: {model}")
@@ -571,8 +569,6 @@ def chat_with_agent_glm(
         # logging(f"[GLM Self-Modification] Client created successfully. Client model: {client_model}")
 
         # Call API
-        print(f"这里是llm_withtools.py中的chat_with_agent_glm函数385行，Input: {msg}"+"\n")
-        print(f"[GLM Self-Modification] 这里是llm_withtools.py中的chat_with_agent_glm函数386行,Making API call to GLM model: {client_model}")
         response, new_msg_history = get_response_from_llm(
             msg=msg,
             client=client,
@@ -582,12 +578,9 @@ def chat_with_agent_glm(
             msg_history=new_msg_history,
         )        
 
-        print(f"这里是llm_withtools.py中的chat_with_agent_glm函数396行，response: {response}"+"\n")
-        print(f"这里是llm_withtools.py中的chat_with_agent_glm函数397行，new_msg_history: {new_msg_history}"+"\n")
 
         # Tool use
         tool_use = check_for_tool_use(response, model=client_model)
-        print(f"这里是llm_withtools.py中的chat_with_agent_glm函数402行，tool_use: {tool_use}"+"\n")
 
         
         while tool_use:
@@ -595,9 +588,6 @@ def chat_with_agent_glm(
             tool_name = tool_use['tool_name']
             tool_input = tool_use['tool_input']
             tool_result = process_tool_call(tools_dict, tool_name, tool_input)
-            print(f"这里是llm_withtools.py中的chat_with_agent_glm函数409行，在while tool_use循环中, tool_name: {tool_name}"+"\n")
-            print(f"这里是llm_withtools.py中的chat_with_agent_glm函数410行，在while tool_use循环中, tool_input: {tool_input}"+"\n")
-            print(f"这里是llm_withtools.py中的chat_with_agent_glm函数409行，在while tool_use循环中, tool_result: {tool_result}"+"\n")
 
             # Get tool response
             tool_msg = f'Tool Used: {tool_name}\nTool Input: {tool_input}\nTool Result: {tool_result}'
@@ -610,11 +600,9 @@ def chat_with_agent_glm(
                 print_debug=False,
                 msg_history=new_msg_history,
             )
-            print(f"这里是llm_withtools.py中的chat_with_agent_glm函数424行，在while tool_use循环中, response: {response}"+"\n")
 
             # Check for next tool use
             tool_use = check_for_tool_use(response, model=client_model)
-            print(f"这里是llm_withtools.py中的chat_with_agent_glm函数427行，在while tool_use循环中, tool_use: {tool_use}"+"\n")
 
     except Exception as e:
         logging(f"[GLM Self-Modification] ERROR in chat_with_agent_glm: {str(e)}")
@@ -622,7 +610,6 @@ def chat_with_agent_glm(
         logging(f"[GLM Self-Modification] Traceback: {traceback.format_exc()}")
         raise  # Re-raise to avoid silent failures
 
-    print(f"这里是llm_withtools.py中的chat_with_agent_glm函数436行，函数返回值new_msg_history: {new_msg_history}"+"\n")
     return new_msg_history
 
 def chat_with_agent_glm_native(
@@ -762,12 +749,9 @@ def chat_with_agent_claude(
         # Load all tools
         all_tools = load_all_tools(logging=logging)
         tools_dict = {tool['info']['name']: tool for tool in all_tools}
-        print(f"这里是llm_withtools.py中的chat_with_agent_claude函数456行，tools_dict: {tools_dict}"+"\n")
         tools = [convert_tool_info(tool['info'], model=client_model) for tool in all_tools]
-        print(f"这里是llm_withtools.py中的chat_with_agent_claude函数458行，用完convert_tool_info之后tools: {tools}"+"\n")
 
         # Call API
-        print(f"这里是llm_withtools.py中的chat_with_agent_claude函数461行，入口参数msg_history + new_msg_history: {msg_history + new_msg_history}"+"\n")
         response = get_response_withtools(
             client=client,
             model=client_model,
@@ -776,10 +760,8 @@ def chat_with_agent_claude(
             tools=tools,
             logging=logging,
         )
-        print(f"这里是llm_withtools.py中的chat_with_agent_claude函数470行，response: {response}"+"\n")
         # Check for tool use
         tool_use = check_for_tool_use(response, model=client_model)
-        print(f"这里是llm_withtools.py中的chat_with_agent_claude函数473行，tool_use: {tool_use}"+"\n")
         while tool_use:
             # Collect all tool_use blocks from response.content to support parallel tool calls
             # This is needed for models like Opus 4.5 that may return multiple tool_use blocks
@@ -850,13 +832,10 @@ def chat_with_agent_claude(
             )
 
             # Check for next tool use
-            print(f"这里是llm_withtools.py中的chat_with_agent_claude函数502行，在while  tool_use循环中, response: {response}"+"\n")
             tool_use = check_for_tool_use(response, model=client_model)
-            print(f"这里是llm_withtools.py中的chat_with_agent_claude函数504行，在while  tool_use循环中, tool_use: {tool_use}"+"\n")
 
         # Get final response
         final_response = next((block.text for block in response.content if hasattr(block, "text")), None)
-        print(f"这里是llm_withtools.py中的chat_with_agent_claude函数508行，在while  tool_use循环中, final_response: {final_response}"+"\n")
         new_msg_history.append({
             "role": "assistant",
             "content": [

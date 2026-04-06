@@ -295,17 +295,7 @@ def find_selfimprove_eval_logs(entry, out_dir, commit_id='initial', filter=True)
     prediction_json_files = [f for f in prediction_json_files if os.path.exists(f)]
     try_eval_logs = [os.path.join(predictions_dir, f, f"{entry}_eval.md") for f in all_preds_folders]
     try_eval_logs = [f for f in try_eval_logs if os.path.exists(f)]
-    print('\n')
-    print(f"这里是self_improvement_prompt.py的find_selfimprove_eval_logs函数")
-    print(f"predictions_dir: {predictions_dir}")
-    print(f"all_preds_folders: {all_preds_folders}")
-    print(f"prediction_log_files: {prediction_log_files}")
-    print(f"prediction_json_files: {prediction_json_files}")
-    print(f"try_eval_logs: {try_eval_logs}")
-    print(f"out_dir: {out_dir}")
-    print(f"commit_id: {commit_id}")
-    print(f"entry: {entry}")
-    print(f"filter: {filter}")
+    
     # Read the evaluation log files and convert markdown to text
     md_logs = []
     for file in prediction_log_files:

@@ -94,12 +94,7 @@ def select_parents_by_performance_novelty(candidates, output_dir, K, M=4, epsilo
         return commits[-K:] if len(commits) >= K else commits
 
     n = len(agents)
-    # Debug: top 10 by performance only (accuracy_score)
-    by_performance = sorted(agents, key=lambda a: a[1], reverse=True)
-    top10_performance = by_performance[:10]
-    print("[performance_novelty] Top 10 by performance only (accuracy_score):")
-    for rank, (commit, alpha, _) in enumerate(top10_performance, start=1):
-        print(f"  {rank}. {commit}: performance={alpha:.6f}")
+    
     sys.stdout.flush()
 
     M_actual = min(M, n - 1)
@@ -138,11 +133,7 @@ def select_parents_by_performance_novelty(candidates, output_dir, K, M=4, epsilo
         scored.append((score_i, commit, alpha, sqrt_nov))
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # Debug: top 10 by performance_novelty (performance * sqrt(novelty))
-    top10_novelty = scored[:10]
-    print("[performance_novelty] Top 10 by performance_novelty (performance, sqrt(novelty), score):")
-    for rank, (score_i, commit, alpha, sqrt_nov) in enumerate(top10_novelty, start=1):
-        print(f"  {rank}. {commit}: performance={alpha:.6f}, sqrt(novelty)={sqrt_nov:.6f}, score={score_i:.6f}")
+    
     sys.stdout.flush()
 
     return [commit for _, commit, _, _ in scored[:K]]
@@ -192,7 +183,6 @@ def choose_selfimproves(output_dir, archive, selfimprove_size, method='random', 
         scores = [candidates[commit]['accuracy_score'] for commit in commits]
         scores = [1 / (1 + math.exp(-10*(score-0.5))) for score in scores]
         probabilities = [score / sum(scores) for score in scores]
-        print(commits)
         parent_commits = random.choices(commits, probabilities, k=selfimprove_size)
     elif method == 'score_child_prop':
         # Choose parents based on score and the number of children
@@ -260,7 +250,6 @@ def choose_selfimproves(output_dir, archive, selfimprove_size, method='random', 
                     weighted_entries.append(('solve_contextlength', 0.3))
 
                 if not weighted_entries:
-                    print(f"这里是DGM_outer.py的choose_selfimproves函数154行，weighted_entries为空，继续.没有unresolved_ids,也没有选中其他任务，跳过")
                     continue
 
                 total_weight = sum(weight for _, weight in weighted_entries)
@@ -306,7 +295,6 @@ def choose_group_improves(output_dir, archive, groupimprove_size, method='random
                 candidates[parent_commit]['children_count'] += 1
         except Exception as e:
             # probably because swe-eval failed, generated code did not compile, etc.
-            print(f"{commit} not eligible for being a parent: {e}")
             continue
 
     # Choose parents based on method and baseline
@@ -325,7 +313,6 @@ def choose_group_improves(output_dir, archive, groupimprove_size, method='random
         scores = [candidates[commit]['accuracy_score'] for commit in commits]
         scores = [1 / (1 + math.exp(-10*(score-0.5))) for score in scores]
         probabilities = [score / sum(scores) for score in scores]
-        print(commits)
         parent_commits = random.choices(commits, probabilities, k=groupimprove_size)
     elif method == 'score_child_prop':
         # Choose parents based on score and the number of children
@@ -394,7 +381,6 @@ def choose_group_improves(output_dir, archive, groupimprove_size, method='random
                     weighted_entries.append(('solve_contextlength', 0.3))
 
                 if not weighted_entries:
-                    print(f"这里是DGM_outer.py的choose_selfimproves函数154行，weighted_entries为空，继续.没有unresolved_ids,也没有选中其他任务，跳过")
                     continue
 
                 total_weight = sum(weight for _, weight in weighted_entries)
@@ -435,92 +421,6 @@ def choose_group_improves(output_dir, archive, groupimprove_size, method='random
 
     return selfimprove_entries
 
-# def choose_group_improves_cursor(output_dir, archive, groupimprove_size, method='random', run_baseline=None, polyglot=False):
-#     """
-#     Choose group improvement attempts for the current generation.
-#     Selects groupimprove_size parent agents and generates 3 children: p1, p2, p1+p2.
-#     For each child, selects specific task logs based on parent performance (similar to choose_selfimproves).
-#     """
-#     groupimprove_entries = []
-    
-#     # Get parent candidates (same logic as choose_selfimproves)
-#     candidates = {}
-#     for commit in archive:
-#         try:
-#             metadata_path = os.path.join(output_dir, commit, "metadata.json")
-#             metadata = load_json_file(metadata_path)
-#             candidates[commit] = {
-#                 'accuracy_score': metadata['overall_performance']['accuracy_score'],
-#                 'total_unresolved_ids': metadata['overall_performance']['total_unresolved_ids'],
-#                 'total_emptypatch_ids': metadata['overall_performance']['total_emptypatch_ids'],
-#                 'total_resolved_ids': metadata['overall_performance']['total_resolved_ids'],
-#                 'children_count': 0,
-#             }
-#             # update children count, parent should already be in the archive
-#             if commit != 'initial':
-#                 parent_commit = metadata['parent_commit']
-#                 candidates[parent_commit]['children_count'] += 1
-#         except Exception as e:
-#             # probably because swe-eval failed, generated code did not compile, etc.
-#             print(f"{commit} not eligible for being a parent: {e}")
-#             continue
-
-#     # Choose parents based on method (same logic as choose_selfimproves)
-#     if run_baseline == 'no_darwin':
-#         # Choose parents randomly for no_darwin baseline
-#         parent_commits = random.choices(list(candidates.keys()), k=groupimprove_size)
-#     elif method == 'score_prop':
-#         # Choose parents based on score
-#         commits = list(candidates.keys())
-#         scores = [candidates[commit]['accuracy_score'] for commit in commits]
-#         scores = [1 / (1 + math.exp(-10*(score-0.5))) for score in scores]
-#         probabilities = [score / sum(scores) for score in scores]
-#         print(commits)
-#         parent_commits = random.choices(commits, probabilities, k=groupimprove_size)
-#     elif method == 'score_child_prop':
-#         # Choose parents based on score and the number of children
-#         commits = list(candidates.keys())
-#         scores = [candidates[commit]['accuracy_score'] for commit in commits]
-#         scores = [1 / (1 + math.exp(-10*(score-0.5))) for score in scores]
-#         children_counts = [candidates[commit]['children_count'] for commit in commits]
-#         children_counts = [1 / (1 + count) for count in children_counts]
-#         probabilities = [score * count for score, count in zip(scores, children_counts)]
-#         probabilities = [prob / sum(probabilities) for prob in probabilities]
-#         parent_commits = random.choices(commits, probabilities, k=groupimprove_size)
-#     elif method == 'best':
-#         # Choose parents with the best score
-#         sorted_commits = sorted(candidates, key=lambda x: candidates[x]['accuracy_score'])
-#         parent_commits = sorted_commits[:min(groupimprove_size, len(sorted_commits))]
-#         if len(parent_commits) < groupimprove_size:
-#             parent_commits.extend(random.choices(parent_commits, k=groupimprove_size - len(parent_commits)))
-#     else:
-#         # Choose parents randomly
-#         parent_commits = random.choices(list(candidates.keys()), k=groupimprove_size)
-
-#     # Generate 3 children: p1, p2, p1+p2 with specific task selection
-#     if len(parent_commits) >= 2:
-#         p1, p2 = parent_commits[0], parent_commits[1]
-        
-#         # Child 1: p1 only - select specific task for p1
-#         p1_task = _select_task_for_parent(candidates[p1], output_dir, p1, polyglot)
-#         groupimprove_entries.append((f"{p1}+{p1_task}", 'group_p1'))
-        
-#         # Child 2: p2 only - select specific task for p2
-#         p2_task = _select_task_for_parent(candidates[p2], output_dir, p2, polyglot)
-#         groupimprove_entries.append((f"{p2}+{p2_task}", 'group_p2'))
-        
-#         # Child 3: p1+p2 combined - select specific tasks for both parents
-#         p1_p2_tasks = f"{p1_task}+{p2_task}"
-#         groupimprove_entries.append((f"{p1}+{p2}+{p1_p2_tasks}", 'group_p1_p2'))
-#     else:
-#         # Fallback: if not enough parents, use single parent for all children
-#         parent = parent_commits[0] if parent_commits else 'initial'
-#         parent_task = _select_task_for_parent(candidates.get(parent, {}), output_dir, parent, polyglot)
-#         groupimprove_entries.append((f"{parent}+{parent_task}", 'group_p1'))
-#         groupimprove_entries.append((f"{parent}+{parent_task}", 'group_p2'))
-#         groupimprove_entries.append((f"{parent}+{parent}+{parent_task}+{parent_task}", 'group_p1_p2'))
-
-#     return groupimprove_entries
 
 
 def _select_task_for_parent(parent_data, output_dir, parent_commit, polyglot=False):
@@ -684,7 +584,6 @@ def main():
     if args.groupimprove_size is not None:
         if args.groupimprove_size != 2:
             raise ValueError("groupimprove_size must be 2 when specified")
-        print(f"Group improvement mode enabled: will select {args.groupimprove_size} parent agents and generate 3 children (p1, p2, p1+p2)")
     else:
         print(f"Standard self-improvement mode: will generate {args.selfimprove_size} children per generation")
 
