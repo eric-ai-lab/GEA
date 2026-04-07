@@ -495,7 +495,7 @@ def update_archive(output_dir, archive, new_ids, method='keep_all', noise_leeway
             if score >= original_score:
                 archive.append(run_id)
     else:
-        # keep everything
+        # keep  everything
         archive += new_ids
 
     return archive
