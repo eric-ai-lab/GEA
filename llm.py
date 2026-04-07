@@ -10,7 +10,7 @@ import openai
 MAX_OUTPUT_TOKENS = 8192
 AVAILABLE_LLMS = [
     # Anthropic models
-    "claude-3-5-haiku-20241022",  # ✅ Haiku 3.5 - 快速且高性价比
+    "claude-3-5-haiku-20241022",  
     # OpenAI models
     "gpt-4o-mini-2024-07-18",
     "gpt-4o-2024-05-13",
@@ -26,7 +26,7 @@ AVAILABLE_LLMS = [
     "glm-4.5-air",
     # Anthropic Claude models (direct API)
     "claude-3-sonnet-20240229",
-    "claude-3-5-haiku-20241022",  # ✅ Haiku 3.5 - 快速且高性价比
+    "claude-3-5-haiku-20241022",  
     "claude-3-haiku-20240307",
     "claude-3-opus-20240229",
     # Anthropic Claude models via Amazon Bedrock
