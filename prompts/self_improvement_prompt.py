@@ -775,7 +775,7 @@ def get_current_code(current_dir, code_files, patch_files=None, exclude_files=No
             continue
 
         if os.path.isfile(full_path):
-            # If it's a file, check if it's excluded based on its relative path
+            # If it is a file, check if it's excluded based on its relative path
             rel_path = os.path.relpath(full_path, current_dir)
             if rel_path not in exclude_set:
                 # Handle polyglot case
@@ -786,7 +786,7 @@ def get_current_code(current_dir, code_files, patch_files=None, exclude_files=No
                 code_text.append(read_file(full_path))
 
         elif os.path.isdir(full_path):
-            # If it's a directory, walk through it
+            # If it is a directory, walk through it
             for root, _, files in os.walk(full_path):
                 for f in files:
                     if f.endswith('.py'):
