@@ -486,7 +486,7 @@ def self_improve(
         save_metadata(metadata, output_dir)
         return metadata
 
-    # Run self-improvement
+    # Run  self-improvement
     safe_log("Running self-improvement")
     chat_history_file_container = "/dgm/self_evo.md"
     test_description = get_test_description(swerepo=False)
