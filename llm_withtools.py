@@ -12,7 +12,7 @@ from llm import create_client, get_response_from_llm
 from prompts.tooluse_prompt import get_tooluse_prompt
 from tools import load_all_tools
 
-# Default to Opus 4.5, but can be overridden by environment variable
+
 _DEFAULT_CLAUDE_MODEL_OPUS = 'bedrock/global.anthropic.claude-opus-4-5-20251101-v1:0'
 _DEFAULT_CLAUDE_MODEL_HAIKU = 'bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0'
 _DEFAULT_CLAUDE_MODEL_SONNET = 'bedrock/global.anthropic.claude-sonnet-4-5-20250929-v1:0'
