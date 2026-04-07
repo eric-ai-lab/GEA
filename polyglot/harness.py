@@ -25,7 +25,7 @@ from swe_bench.utils import (
     setup_logger,
 )
 
-# GEA project root - use absolute paths to avoid cwd race in multi-threaded runs
+# GEA project root use absolute paths to avoid cwd race in multi-threaded runs
 GEA_ROOT = Path(__file__).resolve().parent.parent
 
 def get_eval_script(commands):
@@ -293,7 +293,7 @@ def harness(
     # Ensure that necessary directories exist
     if model_name_or_path is None:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_name_or_path = f"{timestamp}--claude-3-5-haiku-20241022"  # ✅ Haiku 3.5 - 快速且高性价比
+        model_name_or_path = f"{timestamp}--claude-3-5-haiku-20241022" 
     pred_dname = Path(pred_dname)
     pred_dname.mkdir(exist_ok=True)
     output_dir = Path(output_dir)
